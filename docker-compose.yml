@@ -9,7 +9,7 @@ services:
       - ${PSACC_CONFIG:-./psacc}:/config:Z
 
   app:
-    image: ${APP_IMAGE:-ghcr.io/OWNER/corsa-app:latest}
+    image: ${APP_IMAGE:-ghcr.io/aplaideau/corsa-app:latest}
     container_name: corsa-app
     restart: unless-stopped
     env_file: .env

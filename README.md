@@ -16,7 +16,7 @@ téléphone ──Tailscale──▶ VM :8080 ─▶ corsa-app (login + page + p
 | Service    | Image                                  | Rôle                                        |
 |------------|----------------------------------------|---------------------------------------------|
 | `psacc`    | `flobz/psa_car_controller`             | dialogue avec la voiture                     |
-| `app`      | `ghcr.io/OWNER/corsa-app` (ce dépôt)   | connexion, page, proxy vers psacc            |
+| `app`      | `ghcr.io/aplaideau/corsa-app` (ce dépôt)   | connexion, page, proxy vers psacc            |
 
 À chaque `git push` sur `main`, GitHub Actions construit l'image (amd64 + arm64)
 et la publie sur GitHub Container Registry.
@@ -33,7 +33,7 @@ mkdir -p ~/corsa && cd ~/corsa
 #    → y créer .env à partir de .env.example
 
 # 3. Mot de passe et clé de session
-sudo docker run --rm ghcr.io/OWNER/corsa-app:latest node hash.js 'MonMotDePasse'   # ligne à coller dans .env
+sudo docker run --rm ghcr.io/aplaideau/corsa-app:latest node hash.js 'MonMotDePasse'   # ligne à coller dans .env
 openssl rand -hex 32                                                               # valeur de SESSION_SECRET
 
 # 4. Remplacer l'ancienne installation (Caddy + psacc lancés à la main)
