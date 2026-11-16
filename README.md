@@ -3,8 +3,10 @@
 Télécommande personnelle pour une Opel Corsa-e, construite au-dessus de
 [psa_car_controller](https://github.com/flobz/psa_car_controller) (psacc).
 
+- interface issue du design Figma Make « Opel Corsa-e — Contrôle » (React, dossier `frontend/`) ;
 - écran de connexion (un seul utilisateur, « rester connecté » 90 jours) ;
-- page télécommande : batterie, charge (vitesse, heure de fin), limite de charge, préchauffage ;
+- tableau de bord : batterie, autonomie, session de recharge (puissance estimée, temps restant, heure de fin),
+  limite de charge, préchauffage, recharge, verrouillage, localisation, mode clair/sombre ;
 - assistant de configuration (`/setup`) : connexion MyOpel (avec récupération manuelle du code si besoin) puis validation SMS + PIN ;
 - l'interface complète de psacc reste accessible derrière la même connexion.
 
@@ -61,6 +63,8 @@ sudo docker start psacc   # fin de location
 ```
 
 ## Développement local
+
+Interface (design Figma) : `frontend/`, React + Vite. `npm run dev` relaie les appels vers le serveur sur :8080.
 
 ```bash
 cd server && npm install

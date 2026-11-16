@@ -24,7 +24,9 @@ if (!APP_PASSWORD_HASH || !SESSION_SECRET) {
 }
 
 const REMEMBER_MS = 90 * 24 * 3600 * 1000; // « rester connecté » : 90 jours
-const FRONTEND = path.join(__dirname, "public");
+// Built React app (frontend/dist), copied to server/public by the Dockerfile
+const FRONTEND = process.env.FRONTEND_DIR || path.join(__dirname, "public");
+const sendApp = (res) => res.set("Cache-Control", "no-cache").sendFile(path.join(FRONTEND, "index.html"));
 
 const app = express();
 app.set("trust proxy", true);
@@ -55,7 +57,7 @@ app.get("/healthz", (req, res) => res.send("ok"));
 
 app.get("/login", (req, res) => {
   if (req.session && req.session.user) return res.redirect("/corsa");
-  res.sendFile(path.join(FRONTEND, "login.html"));
+  sendApp(res);
 });
 
 app.post("/api/login", express.json(), async (req, res) => {
@@ -74,8 +76,9 @@ app.post("/api/login", express.json(), async (req, res) => {
 
 app.post("/api/logout", (req, res) => { req.session = null; res.json({ ok: true }); });
 
-// static assets needed by the login page (css, icons…)
-app.use("/assets", express.static(path.join(FRONTEND, "assets")));
+// static files of the app, needed by the login screen too (hashed names → long cache)
+app.use("/assets", express.static(path.join(FRONTEND, "assets"), { immutable: true, maxAge: "1y" }));
+app.use("/media", express.static(path.join(FRONTEND, "media"), { maxAge: "7d" }));
 
 // ---- everything below requires login ---------------------------------------
 app.use((req, res, next) => {
@@ -227,9 +230,7 @@ app.get("/api/me", async (req, res) => {
   res.json({ user: req.session.user, vin });
 });
 
-app.get(["/corsa", "/seuil"], (req, res) => res.sendFile(path.join(FRONTEND, "index.html")));
-app.get("/setup", (req, res) => res.sendFile(path.join(FRONTEND, "setup.html")));
-app.use("/app", express.static(FRONTEND, { index: "index.html" }));
+app.get(["/corsa", "/seuil", "/setup"], (req, res) => sendApp(res));
 
 // psacc: API (get_vehicleinfo, charge_control, …) and its full Dash UI
 app.use("/", createProxyMiddleware({
