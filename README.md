@@ -52,7 +52,7 @@ La configuration psacc existante (`~/psacc` : MyOpel, OTP, limite de charge) est
 ## Mettre à jour
 
 ```bash
-cd ~/corsa && sudo docker compose pull && sudo docker compose up -d
+cd ~/corsa && git pull && sudo docker compose pull && sudo docker compose up -d
 ```
 
 ## Mode location
@@ -75,8 +75,7 @@ Installation sur la VM (une fois) :
 
 ```bash
 cd ~/corsa && mkdir -p data
-# copier deploy/rental-sync.sh dans ~/corsa/, et les deux fichiers .service / .timer dans /etc/systemd/system/
-chmod +x rental-sync.sh
+sudo cp deploy/corsa-rental-sync.service deploy/corsa-rental-sync.timer /etc/systemd/system/
 sudo systemctl daemon-reload && sudo systemctl enable --now corsa-rental-sync.timer
 ```
 

@@ -2,7 +2,11 @@
 # Mode location : relance psacc SANS enregistrement (trajets, positions) pendant une location.
 # L'appli écrit data/state.json ; ce script, lancé chaque minute par systemd, applique le mode.
 set -euo pipefail
-cd "$(dirname "$(readlink -f "$0")")"
+# dossier de l'installation (celui qui contient docker-compose.yml et data/)
+DIR="$(dirname "$(readlink -f "$0")")"
+[ "$(basename "$DIR")" = "deploy" ] && DIR="$(dirname "$DIR")"
+cd "$DIR"
+mkdir -p data
 
 STATE=data/state.json
 WITH_RECORD="-c -r --web-conf"     # options par défaut de l'image psacc
