@@ -40,6 +40,7 @@
 <body>
 <main>
   <h1>Ma Corsa-e</h1>
+  <a id="setupBanner" href="/setup" hidden style="display:block;background:#fde7d2;color:#a14d00;border-radius:12px;padding:12px;margin-bottom:14px;text-decoration:none;text-align:center;font-weight:600">⚠️ Commandes à distance non configurées — terminer la configuration</a>
   <div id="msg"></div>
 
   <div class="card">
@@ -88,7 +89,7 @@
     <div class="btns"><button class="full" id="wakeup">🔄 Demander l'état à la voiture</button></div>
   </div>
 
-  <div class="foot"><a href="/">Interface complète PSA Car Controller</a> · <a href="#" id="logout">Se déconnecter</a></div>
+  <div class="foot"><a href="/">Interface complète PSA Car Controller</a> · <a href="/setup">Configuration</a> · <a href="#" id="logout">Se déconnecter</a></div>
 </main>
 
 <script>
@@ -191,6 +192,12 @@
 
   async function logout() { await fetch("/api/logout", { method: "POST" }); location.href = "/login"; }
   $("logout").onclick = (e) => { e.preventDefault(); logout(); };
+
+  fetch("/api/setup/status").then(r => r.ok ? r.json() : null).then(s => {
+    if (!s) return;
+    if (s.psacc && !s.loggedIn) location.href = "/setup";
+    else if (s.psacc && !s.otp) $("setupBanner").hidden = false;
+  }).catch(() => {});
 
   fetch("/api/me").then(r => { if (r.status === 401) { location.href = "/login"; throw 0; } return r.json(); })
     .then(me => {

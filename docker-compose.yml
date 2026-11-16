@@ -6,7 +6,7 @@ services:
     tty: true
     stdin_open: true
     volumes:
-      - ${PSACC_CONFIG:-./psacc}:/config:Z
+      - ${PSACC_CONFIG:-./psacc}:/config:z
 
   app:
     image: ${APP_IMAGE:-ghcr.io/aplaideau/corsa-app:latest}
@@ -15,6 +15,10 @@ services:
     env_file: .env
     environment:
       PSACC_URL: http://psacc:5000
+      PSACC_CONFIG_DIR: /psacc-config
+    volumes:
+      # lecture seule : l'appli vérifie seulement si l'OTP est configuré
+      - ${PSACC_CONFIG:-./psacc}:/psacc-config:ro,z
     ports:
       - "8080:8080"
     depends_on:

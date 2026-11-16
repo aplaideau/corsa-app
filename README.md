@@ -5,6 +5,7 @@ Télécommande personnelle pour une Opel Corsa-e, construite au-dessus de
 
 - écran de connexion (un seul utilisateur, « rester connecté » 90 jours) ;
 - page télécommande : batterie, charge (vitesse, heure de fin), limite de charge, préchauffage ;
+- assistant de configuration (`/setup`) : connexion MyOpel (avec récupération manuelle du code si besoin) puis validation SMS + PIN ;
 - l'interface complète de psacc reste accessible derrière la même connexion.
 
 ## Architecture
@@ -66,6 +67,28 @@ cd server && npm install
 APP_PASSWORD_HASH="$(node -e "console.log(require('bcryptjs').hashSync('test',12))")" \
 SESSION_SECRET=dev VIN=VXK... PSACC_URL=http://localhost:5000 node index.js
 ```
+
+## API de l'appli (pour les écrans)
+
+Toutes les routes exigent d'être connecté (cookie de session), sauf `/login` et `/api/login`.
+
+| Méthode | Route | Corps | Réponse |
+|---|---|---|---|
+| POST | `/api/login` | `{user, password, remember}` | `{ok}` ou 401 `{error}` |
+| POST | `/api/logout` | – | `{ok}` |
+| GET | `/api/me` | – | `{user, vin}` |
+| GET | `/api/setup/status` | – | `{psacc, loggedIn, otp, vin}` |
+| POST | `/api/setup/login` | `{email, password, country}` | `{status: "done"}` · `{status: "manual", authUrl}` · `{status: "error", message}` |
+| POST | `/api/setup/code` | `{code}` (code seul ou adresse `mym…://…?code=…`) | `{status: "done" \| "error", message?}` |
+| POST | `/api/setup/sms` | – | `{status: "sent" \| "error", message?}` |
+| POST | `/api/setup/otp` | `{sms, pin}` | `{status: "done" \| "error", message?}` |
+
+Routes psacc utilisées par la télécommande (relayées telles quelles) :
+`/get_vehicleinfo/<vin>?from_cache=1`, `/charge_control?vin=<vin>[&percentage=85]`,
+`/charge_now/<vin>/<0|1>`, `/preconditioning/<vin>/<0|1>`, `/wakeup/<vin>` (6 max / 20 min).
+
+Logique d'aiguillage conseillée : si `loggedIn` est faux → assistant de configuration ;
+si `otp` est faux → bandeau « terminer la configuration » (les commandes à distance ne marchent pas).
 
 ## Sécurité
 
