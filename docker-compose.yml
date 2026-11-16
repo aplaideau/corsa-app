@@ -1,0 +1,21 @@
+services:
+  psacc:
+    image: flobz/psa_car_controller:latest
+    container_name: psacc
+    restart: unless-stopped
+    tty: true
+    stdin_open: true
+    volumes:
+      - ${PSACC_CONFIG:-./psacc}:/config:Z
+
+  app:
+    image: ${APP_IMAGE:-ghcr.io/OWNER/corsa-app:latest}
+    container_name: corsa-app
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      PSACC_URL: http://psacc:5000
+    ports:
+      - "8080:8080"
+    depends_on:
+      - psacc
