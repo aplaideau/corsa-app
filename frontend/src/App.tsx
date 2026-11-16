@@ -659,6 +659,9 @@ const emptyVehicle: VehicleSnapshot = {
   address: "",
 };
 
+// Universal link: opens the Getaround app when installed, the website otherwise.
+const GETAROUND_URL = "https://fr.getaround.com/";
+
 const THEME_KEY = "corsa-theme";
 const readTheme = () => {
   try {
@@ -1048,6 +1051,23 @@ function Dashboard({ onLoggedOut }: { onLoggedOut: () => void }) {
           <span>
             <strong>Configuration</strong>
             <small>Compte, véhicule et connexion</small>
+          </span>
+          <Icon name="chevron" size={19} />
+        </button>
+        <button
+          className="option-row"
+          onClick={() => {
+            setMenuOpen(false);
+            window.open(GETAROUND_URL, "_blank", "noopener,noreferrer");
+          }}
+          type="button"
+        >
+          <span className="option-icon">
+            <Icon name="unlock" />
+          </span>
+          <span>
+            <strong>Ouvrir / fermer via Getaround</strong>
+            <small>Lance l’application Getaround (boîtier Connect)</small>
           </span>
           <Icon name="chevron" size={19} />
         </button>
