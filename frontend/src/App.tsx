@@ -180,9 +180,9 @@ function Control({
 }
 
 const vehicleMedia = {
-  parked: "/media/corsa-e-parked.png",
-  charging: "/media/corsa-e-charging.gif",
-  driving: "/media/corsa-e-driving.gif",
+  parked: "/media/corsa-e-parked.webp",
+  charging: "/media/corsa-e-charging.webp",
+  driving: "/media/corsa-e-driving.webp",
 } as const;
 
 const vehicleAlt = {

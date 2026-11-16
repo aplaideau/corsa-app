@@ -79,6 +79,7 @@ app.post("/api/logout", (req, res) => { req.session = null; res.json({ ok: true 
 // static files of the app, needed by the login screen too (hashed names → long cache)
 app.use("/assets", express.static(path.join(FRONTEND, "assets"), { immutable: true, maxAge: "1y" }));
 app.use("/media", express.static(path.join(FRONTEND, "media"), { maxAge: "7d" }));
+app.get("/favicon.png", (req, res) => res.sendFile(path.join(FRONTEND, "favicon.png")));
 
 // ---- everything below requires login ---------------------------------------
 app.use((req, res, next) => {
