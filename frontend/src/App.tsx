@@ -3,14 +3,17 @@ import {
   ApiError,
   getMe,
   getSetupStatus,
+  getRentalMode,
   getVehicleStatus,
   login,
   logout,
   sendVehicleCommand,
+  setRentalMode,
   setupCode,
   setupLogin,
   setupOtp,
   setupSms,
+  type RentalMode,
   type SetupStatus,
   type VehicleCommand,
   type VehicleSnapshot,
@@ -686,6 +689,9 @@ function Dashboard({ onLoggedOut }: { onLoggedOut: () => void }) {
   const [syncing, setSyncing] = useState(true);
   const [toast, setToast] = useState("");
   const [draftLimit, setDraftLimit] = useState<number | null>(null);
+  const [rental, setRental] = useState<RentalMode | null>(null);
+  const [rentalBusy, setRentalBusy] = useState(false);
+  const rentalOn = Boolean(rental?.enabled);
   const toastTimer = useRef<number | undefined>(undefined);
   const followUp = useRef<number | undefined>(undefined);
   const vehicleMode = vehicle.driving ? "driving" : vehicle.charging ? "charging" : "parked";
@@ -734,8 +740,13 @@ function Dashboard({ onLoggedOut }: { onLoggedOut: () => void }) {
 
   const loadAll = useCallback(async () => {
     try {
-      const [me, status] = await Promise.all([getMe(), getSetupStatus()]);
+      const [me, status, rentalMode] = await Promise.all([
+        getMe(),
+        getSetupStatus(),
+        getRentalMode().catch(() => null),
+      ]);
       setSetup(status);
+      setRental(rentalMode);
       const currentVin = me.vin || status.vin || "";
       setVin(currentVin);
       if (status.psacc && !status.loggedIn) setConfigurationOpen(true);
@@ -782,7 +793,30 @@ function Dashboard({ onLoggedOut }: { onLoggedOut: () => void }) {
     );
   };
 
+  const toggleRental = async () => {
+    const enable = !rentalOn;
+    if (
+      enable &&
+      !window.confirm(
+        "Activer le mode location ?\n\nLa position sera masquée, les trajets ne seront plus enregistrés et l’envoi vers ABRP sera coupé. La limite de charge reste active.",
+      )
+    )
+      return;
+    setRentalBusy(true);
+    try {
+      const result = await setRentalMode(enable);
+      setRental(result);
+      notify(enable ? "Mode location activé" : "Mode location désactivé");
+      void refresh(vin);
+    } catch (e) {
+      handleError(e);
+    } finally {
+      setRentalBusy(false);
+    }
+  };
+
   const toggleLock = () => {
+    if (rentalOn) return notify("Pendant une location, utilisez l’application Getaround");
     const lock = vehicle.locked === false;
     const message = lock
       ? "Verrouiller la voiture via Opel ?"
@@ -841,6 +875,17 @@ function Dashboard({ onLoggedOut }: { onLoggedOut: () => void }) {
             <Icon name="menu" />
           </button>
         </header>
+
+        {rentalOn && (
+          <button className="setup-banner" onClick={() => setMenuOpen(true)} type="button">
+            <Icon name="lock" size={18} />
+            <span>
+              Mode location · position masquée
+              {rental?.recording === "on" ? " (application en cours…)" : ""}
+            </span>
+            <span>Gérer</span>
+          </button>
+        )}
 
         {setup?.loggedIn && !setup.otp && (
           <button className="setup-banner" onClick={() => setConfigurationOpen(true)} type="button">
@@ -969,18 +1014,21 @@ function Dashboard({ onLoggedOut }: { onLoggedOut: () => void }) {
             <div>
               <span className="section-label">LOCALISATION</span>
               <h2>
-                {vehicle.city}
-                {vehicle.country ? `, ${vehicle.country}` : ""}
+                {rentalOn
+                  ? "Position masquée"
+                  : `${vehicle.city}${vehicle.country ? `, ${vehicle.country}` : ""}`}
               </h2>
               <p>
-                {[vehicle.address, updatedLabel ? `mise à jour à ${updatedLabel}` : null]
-                  .filter(Boolean)
-                  .join(" · ") || "Position inconnue"}
+                {rentalOn
+                  ? "Mode location : la position n’est ni affichée ni enregistrée"
+                  : [vehicle.address, updatedLabel ? `mise à jour à ${updatedLabel}` : null]
+                      .filter(Boolean)
+                      .join(" · ") || "Position inconnue"}
               </p>
             </div>
             <button
               aria-label="Voir la localisation"
-              disabled={!mapsUrl}
+              disabled={!mapsUrl || rentalOn}
               type="button"
               onClick={() => mapsUrl && window.open(mapsUrl, "_blank", "noopener,noreferrer")}
             >
@@ -1034,6 +1082,24 @@ function Dashboard({ onLoggedOut }: { onLoggedOut: () => void }) {
             <small>{dark ? "Mode sombre" : "Mode clair"}</small>
           </span>
           <span className={`toggle ${dark ? "on" : ""}`}>
+            <i />
+          </span>
+        </button>
+        <button className="option-row" disabled={rentalBusy} onClick={() => void toggleRental()} type="button">
+          <span className="option-icon">
+            <Icon name={rentalOn ? "lock" : "unlock"} />
+          </span>
+          <span>
+            <strong>Mode location</strong>
+            <small>
+              {rentalBusy
+                ? "Application…"
+                : rentalOn
+                  ? "Position masquée, trajets non enregistrés"
+                  : "À activer pendant une location Getaround"}
+            </small>
+          </span>
+          <span className={`toggle ${rentalOn ? "on" : ""}`}>
             <i />
           </span>
         </button>

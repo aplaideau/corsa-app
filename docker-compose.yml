@@ -5,6 +5,9 @@ services:
     restart: unless-stopped
     tty: true
     stdin_open: true
+    environment:
+      # modifié automatiquement par rental-sync.sh en mode location (sans -r : rien n'est enregistré)
+      PSACC_OPTIONS: ${PSACC_OPTIONS:--c -r --web-conf}
     volumes:
       - ${PSACC_CONFIG:-./psacc}:/config:z
 
@@ -16,9 +19,12 @@ services:
     environment:
       PSACC_URL: http://psacc:5000
       PSACC_CONFIG_DIR: /psacc-config
+      DATA_DIR: /data
     volumes:
       # lecture seule : l'appli vérifie seulement si l'OTP est configuré
       - ${PSACC_CONFIG:-./psacc}:/psacc-config:ro,z
+      # état de l'appli (mode location), lu par rental-sync.sh
+      - ./data:/data:z
     ports:
       - "8080:8080"
     depends_on:

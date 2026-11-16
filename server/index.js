@@ -16,6 +16,7 @@ const {
   PORT = "8080",
   COOKIE_SECURE = "false",
   PSACC_CONFIG_DIR = "/psacc-config", // dossier psacc monté en lecture seule
+  DATA_DIR = "/data",                  // état de l'appli (mode location), partagé avec le script de la VM
 } = process.env;
 
 if (!APP_PASSWORD_HASH || !SESSION_SECRET) {
@@ -225,6 +226,75 @@ app.post("/api/setup/otp", express.json(), async (req, res) => {
   } catch (e) { return setupError(res, e); }
 });
 
+
+// ---- mode location -----------------------------------------------------------
+// Pendant une location : position masquée, ABRP coupé, enregistrement des trajets arrêté
+// (appliqué par deploy/rental-sync.sh sur la VM), verrouillage Opel bloqué.
+// La limite de charge reste active.
+const STATE_FILE = path.join(DATA_DIR, "state.json");
+const RECORDING_FILE = path.join(DATA_DIR, "recording"); // écrit par le script de la VM : on | off
+
+function readState() {
+  try { return JSON.parse(fs.readFileSync(STATE_FILE, "utf8")); } catch (e) { return {}; }
+}
+function writeState(state) {
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+  fs.writeFileSync(STATE_FILE + ".tmp", JSON.stringify(state));
+  fs.renameSync(STATE_FILE + ".tmp", STATE_FILE);
+}
+const rentalActive = () => Boolean(readState().rental && readState().rental.enabled);
+
+function rentalStatus() {
+  const r = readState().rental || { enabled: false };
+  let recording = "unknown";
+  try { recording = fs.readFileSync(RECORDING_FILE, "utf8").trim(); } catch (e) {}
+  return { enabled: Boolean(r.enabled), since: r.since || null, recording };
+}
+
+async function setRentalMode(enabled) {
+  const state = readState();
+  const current = state.rental || {};
+  if (Boolean(current.enabled) === enabled) return rentalStatus();
+  if (enabled) {
+    // couper ABRP (il reçoit la position) en mémorisant ce qui était actif
+    let abrpVins = [];
+    try {
+      const abrp = await psacc("/abrp");
+      abrpVins = abrp.abrp_enable_vin || [];
+      for (const v of abrpVins) await psacc(`/abrp?vin=${encodeURIComponent(v)}&enable=0`);
+    } catch (e) { console.warn("mode location : ABRP non modifié", e.message); }
+    state.rental = { enabled: true, since: new Date().toISOString(), abrpVins };
+  } else {
+    for (const v of current.abrpVins || []) {
+      try { await psacc(`/abrp?vin=${encodeURIComponent(v)}&enable=1`); } catch (e) {}
+    }
+    state.rental = { enabled: false, since: null };
+  }
+  writeState(state);
+  console.log(`mode location ${enabled ? "activé" : "désactivé"}`);
+  return rentalStatus();
+}
+
+app.get("/api/rental-mode", (req, res) => res.json(rentalStatus()));
+app.post("/api/rental-mode", express.json(), async (req, res) => {
+  try { res.json(await setRentalMode(Boolean((req.body || {}).enabled))); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// État du véhicule : position retirée en mode location
+app.get("/get_vehicleinfo/:vin", async (req, res) => {
+  try {
+    const q = req.query.from_cache ? "?from_cache=1" : "";
+    const info = await psacc(`/get_vehicleinfo/${encodeURIComponent(req.params.vin)}${q}`, { timeout: 60000 });
+    if (rentalActive()) {
+      delete info.last_position;
+      if (info.kinetic) delete info.kinetic.speed;
+      info.rental_mode = true;
+    }
+    res.json(info);
+  } catch (e) { res.status(502).json({ error: "psacc ne répond pas (en pause ?)" }); }
+});
+
 app.get("/api/me", async (req, res) => {
   let vin = VIN;
   try { vin = await getVin(); } catch (e) {}
@@ -232,6 +302,15 @@ app.get("/api/me", async (req, res) => {
 });
 
 app.get(["/corsa", "/seuil", "/setup"], (req, res) => sendApp(res));
+
+// En mode location, seules ces routes psacc restent accessibles (pas de carte, trajets, verrouillage…)
+const RENTAL_ALLOWED = [/^\/get_vehicles$/, /^\/charge_control$/, /^\/charge_now\//, /^\/preconditioning\//, /^\/wakeup\//];
+app.use((req, res, next) => {
+  if (!rentalActive() || RENTAL_ALLOWED.some((r) => r.test(req.path))) return next();
+  const msg = "Mode location actif : la position, les trajets et le verrouillage sont désactivés.";
+  if ((req.headers.accept || "").includes("text/html")) return res.status(423).send(`<p style="font-family:sans-serif;padding:2em">${msg}</p>`);
+  res.status(423).json({ error: msg });
+});
 
 // psacc: API (get_vehicleinfo, charge_control, …) and its full Dash UI
 app.use("/", createProxyMiddleware({

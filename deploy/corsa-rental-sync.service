@@ -1,0 +1,8 @@
+[Unit]
+Description=Corsa-e : applique le mode location à psacc
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/home/opc/corsa/rental-sync.sh

@@ -80,6 +80,12 @@ export const setupCode = (code: string) => postJson<SetupResult>("/api/setup/cod
 export const setupSms = () => postJson<SetupResult>("/api/setup/sms");
 export const setupOtp = (sms: string, pin: string) => postJson<SetupResult>("/api/setup/otp", { sms, pin });
 
+// ---- rental mode -------------------------------------------------------------
+
+export type RentalMode = { enabled: boolean; since: string | null; recording: "on" | "off" | "unknown" };
+export const getRentalMode = () => request<RentalMode>("/api/rental-mode");
+export const setRentalMode = (enabled: boolean) => postJson<RentalMode>("/api/rental-mode", { enabled });
+
 // ---- vehicle ---------------------------------------------------------------
 
 type Raw = Record<string, any>;

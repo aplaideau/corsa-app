@@ -55,12 +55,32 @@ La configuration psacc existante (`~/psacc` : MyOpel, OTP, limite de charge) est
 cd ~/corsa && sudo docker compose pull && sudo docker compose up -d
 ```
 
-## Pause pendant les locations
+## Mode location
+
+À activer pendant une location Getaround (menu Options de l'appli) :
+
+| | Mode location |
+|---|---|
+| Position | masquée dans l'appli, carte et trajets psacc bloqués |
+| Enregistrement (trajets, positions, charges) | arrêté : psacc relancé sans `-r` |
+| ABRP | coupé, puis rétabli à la fin |
+| Verrouillage Opel | bloqué (utiliser l'appli Getaround) |
+| Batterie, autonomie, état de charge | visibles |
+| Limite de charge | **reste active** |
+
+L'appli écrit `data/state.json` ; le script `deploy/rental-sync.sh`, lancé chaque minute par
+un timer systemd sur la VM, relance psacc avec ou sans enregistrement (`PSACC_OPTIONS`).
+
+Installation sur la VM (une fois) :
 
 ```bash
-sudo docker stop psacc    # début de location
-sudo docker start psacc   # fin de location
+cd ~/corsa && mkdir -p data
+# copier deploy/rental-sync.sh dans ~/corsa/, et les deux fichiers .service / .timer dans /etc/systemd/system/
+chmod +x rental-sync.sh
+sudo systemctl daemon-reload && sudo systemctl enable --now corsa-rental-sync.timer
 ```
+
+Pour tout arrêter (pause complète) : `sudo docker stop psacc`, puis `sudo docker start psacc`.
 
 ## Développement local
 
