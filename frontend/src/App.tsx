@@ -18,6 +18,7 @@ import {
   type VehicleCommand,
   type VehicleSnapshot,
 } from "./services/vehicleApi";
+import { VehicleMap } from "./VehicleMap";
 
 type IconName =
   | "arrowLeft"
@@ -846,6 +847,8 @@ function Dashboard({ onLoggedOut }: { onLoggedOut: () => void }) {
     vehicle.batteryLevel > 0
       ? Math.round((vehicle.rangeKm / vehicle.batteryLevel) * chargeLimit)
       : Math.round((322 * chargeLimit) / 100);
+  // carte réelle seulement si la position est connue et hors mode location
+  const showRealMap = !rentalOn && vehicle.latitude != null && vehicle.longitude != null;
   const mapsUrl =
     vehicle.latitude != null && vehicle.longitude != null
       ? `https://www.google.com/maps/search/?api=1&query=${vehicle.latitude},${vehicle.longitude}`
@@ -1002,11 +1005,16 @@ function Dashboard({ onLoggedOut }: { onLoggedOut: () => void }) {
                 d="M140-5c44 70 24 135-18 228M365-10c-24 62-6 116 63 231M-10 116c80-20 132 10 202 62M313 32c42 35 113 35 205 10"
               />
             </svg>
-            <div className="map-marker">
-              <span>
-                <Icon name="car" size={20} />
-              </span>
-            </div>
+            {showRealMap && (
+              <VehicleMap dark={dark} latitude={vehicle.latitude!} longitude={vehicle.longitude!} />
+            )}
+            {!rentalOn && (
+              <div className={`map-marker ${showRealMap ? "real" : ""}`}>
+                <span>
+                  <Icon name="car" size={20} />
+                </span>
+              </div>
+            )}
             <div className="map-overlay" />
           </div>
           <div className="location-details">
