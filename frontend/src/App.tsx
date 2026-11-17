@@ -451,7 +451,7 @@ function ConfigurationFlow({
       setError("Demandez d’abord la validation par SMS.");
       return;
     }
-    if (!/^\d{4,8}$/.test(smsCode.trim())) {
+    if (!/^\d{4,12}$/.test(smsCode.trim())) {
       setError("Saisissez le code reçu par SMS.");
       return;
     }
@@ -599,7 +599,7 @@ function ConfigurationFlow({
                 autoComplete="one-time-code"
                 inputMode="numeric"
                 onChange={(event) => setSmsCode(event.target.value.replace(/\D/g, ""))}
-                placeholder="Code à 6 chiffres"
+                placeholder="Code reçu par SMS"
                 value={smsCode}
               />
             </label>
