@@ -19,6 +19,7 @@ import {
   type VehicleSnapshot,
 } from "./services/vehicleApi";
 import { VehicleMap } from "./VehicleMap";
+import { NotificationsScreen } from "./NotificationsScreen";
 
 type IconName =
   | "arrowLeft"
@@ -29,6 +30,7 @@ type IconName =
   | "chevron"
   | "climate"
   | "close"
+  | "bell"
   | "external"
   | "gear"
   | "lock"
@@ -49,6 +51,12 @@ const icons: Record<IconName, ReactNode> = {
       <rect x="3" y="7" width="16" height="10" rx="2" />
       <path d="M21 10v4" />
       <path d="M6 10h8v4H6z" fill="currentColor" stroke="none" />
+    </>
+  ),
+  bell: (
+    <>
+      <path d="M6 9a6 6 0 0 1 12 0c0 6 2.5 7.5 2.5 7.5h-17S6 15 6 9Z" />
+      <path d="M10 20a2 2 0 0 0 4 0" />
     </>
   ),
   bolt: <path d="m13 2-8 12h7l-1 8 8-12h-7l1-8Z" />,
@@ -682,6 +690,7 @@ function Dashboard({ onLoggedOut }: { onLoggedOut: () => void }) {
   const [dark, setDark] = useState(readTheme);
   const [menuOpen, setMenuOpen] = useState(false);
   const [configurationOpen, setConfigurationOpen] = useState(window.location.pathname === "/setup");
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [vin, setVin] = useState("");
   const [getaroundUrl, setGetaroundUrl] = useState(GETAROUND_FALLBACK_URL);
   const [setup, setSetup] = useState<SetupStatus | null>(null);
@@ -1082,6 +1091,14 @@ function Dashboard({ onLoggedOut }: { onLoggedOut: () => void }) {
         </div>
       </main>
 
+      {notificationsOpen && (
+        <NotificationsScreen
+          backIcon={<Icon name="arrowLeft" />}
+          closeIcon={<Icon name="close" />}
+          onClose={() => setNotificationsOpen(false)}
+        />
+      )}
+
       {configurationOpen && (
         <ConfigurationFlow
           initialStep={initialStepFor(setup)}
@@ -1143,6 +1160,23 @@ function Dashboard({ onLoggedOut }: { onLoggedOut: () => void }) {
           <span className={`toggle ${rentalOn ? "on" : ""}`}>
             <i />
           </span>
+        </button>
+        <button
+          className="option-row"
+          onClick={() => {
+            setMenuOpen(false);
+            setNotificationsOpen(true);
+          }}
+          type="button"
+        >
+          <span className="option-icon">
+            <Icon name="bell" />
+          </span>
+          <span>
+            <strong>Notifications</strong>
+            <small>Locations, charge, batterie</small>
+          </span>
+          <Icon name="chevron" size={19} />
         </button>
         <button
           className="option-row"

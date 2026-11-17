@@ -74,9 +74,13 @@ function parseGetaroundEmail({ subject = "", from = "", text = "", html = "", da
   const actual = labelMatch ? parseLongDate(labelMatch[1]) : null;
   const planned = parseShortDates(plain, date || new Date());
 
+  const distance = /Distance parcourue\s*(\d+)\s*km/i.exec(plain);
+  const level = /Niveau de (?:carburant|batterie)[^0-9%]{0,40}(\d{1,3})\s*%/i.exec(plain);
   return {
     type,
     rentalId: idMatch[1],
+    distanceKm: distance ? Number(distance[1]) : null,
+    levelPercent: level ? Number(level[1]) : null,
     at: actual || date || new Date(),
     plannedStart: planned[0] || null,
     plannedEnd: planned[1] || null,

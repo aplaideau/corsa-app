@@ -1229,3 +1229,76 @@
 .map-attribution a {
   color: inherit;
 }
+
+/* Écran Notifications (mêmes jetons que les écrans de configuration) */
+.notif-card {
+  padding-top: 10px;
+}
+
+.notif-row {
+  display: grid;
+  width: 100%;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 13px;
+  padding: 14px 0;
+  border: 0;
+  border-top: 1px solid var(--line);
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+}
+
+.notif-row.master {
+  border-top: 0;
+}
+
+.notif-row strong,
+.notif-row small {
+  display: block;
+}
+
+.notif-row strong {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.notif-row small {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.notif-heading {
+  margin: 14px 0 2px;
+}
+
+.notif-threshold {
+  padding-top: 6px;
+}
+
+.notif-threshold strong {
+  color: var(--text);
+}
+
+.notif-message {
+  margin: 14px 0 0 !important;
+  color: var(--accent-strong) !important;
+  font-size: 11px !important;
+  text-align: center;
+}
+
+/* le curseur de seuil garde le style du curseur « Limite de charge » */
+.configuration-card input.range {
+  height: 4px;
+  margin: 18px 0 8px;
+  padding: 0;
+  border: 0;
+  border-radius: 99px;
+  box-shadow: none;
+  background: linear-gradient(
+    to right,
+    var(--accent) 0 var(--progress),
+    var(--surface-2) var(--progress) 100%
+  );
+}

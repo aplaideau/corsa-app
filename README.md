@@ -95,6 +95,22 @@ Les e-mails sont seulement marqués comme lus. Réglages : `MAIL_USER` et `MAIL_
 
 Pour tout arrêter (pause complète) : `sudo docker stop psacc`, puis `sudo docker start psacc`.
 
+## Notifications
+
+Notifications push (Web Push) envoyées par le serveur aux appareils où l'appli est **installée sur l'écran d'accueil**.
+Types : début / fin de location, fin non confirmée, charge terminée, charge interrompue, batterie basse
+(seuil par appareil), problème technique. Chaque appareil choisit ses types dans Options → Notifications.
+
+Prérequis : l'appli doit être servie en **HTTPS**. Avec Tailscale :
+
+1. login.tailscale.com → *DNS* : activer **MagicDNS** et **HTTPS Certificates** ;
+2. sur la VM : `sudo tailscale serve --bg 8080` (l'adresse s'affiche, du type `https://<vm>.<tailnet>.ts.net`) ;
+3. sur l'iPhone : ouvrir cette adresse, *Partager → Sur l'écran d'accueil*, rouvrir depuis l'icône,
+   puis Options → Notifications → *Activer sur cet appareil*.
+
+Les clés de notification sont créées au premier démarrage dans `data/vapid.json` (à conserver).
+Les notifications ne contiennent jamais la position ni le nom du locataire.
+
 ## Développement local
 
 Interface (design Figma) : `frontend/`, React + Vite. `npm run dev` relaie les appels vers le serveur sur :8080.

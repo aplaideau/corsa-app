@@ -15,6 +15,7 @@
     "express": "^4.21.2",
     "http-proxy-middleware": "^3.0.3",
     "imapflow": "^2.12.1",
-    "mailparser": "^3.14.5"
+    "mailparser": "^3.14.5",
+    "web-push": "^4.0.0"
   }
 }

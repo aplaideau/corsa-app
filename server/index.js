@@ -7,6 +7,7 @@ const cookieSession = require("cookie-session");
 const bcrypt = require("bcryptjs");
 const { createProxyMiddleware } = require("http-proxy-middleware");
 const { startMailWatcher } = require("./getaround-mail");
+const { createNotifier, startVehicleMonitor } = require("./notifications");
 
 const {
   APP_USER = "alexandre",
@@ -27,6 +28,7 @@ const {
   MAIL_IMAP_PORT = "993",
   MAIL_IMAP_TLS = "true",
   MAIL_CHECK_SECONDS = "120",
+  MONITOR_SECONDS = "120",
 } = process.env;
 
 if (!APP_PASSWORD_HASH || !SESSION_SECRET) {
@@ -91,6 +93,10 @@ app.post("/api/logout", (req, res) => { req.session = null; res.json({ ok: true 
 app.use("/assets", express.static(path.join(FRONTEND, "assets"), { immutable: true, maxAge: "1y" }));
 app.use("/media", express.static(path.join(FRONTEND, "media"), { maxAge: "7d" }));
 app.get("/favicon.png", (req, res) => res.sendFile(path.join(FRONTEND, "favicon.png")));
+// appli installée sur l'écran d'accueil : service worker (notifications) et manifeste, sans connexion
+app.get("/sw.js", (req, res) => res.set("Cache-Control", "no-cache").sendFile(path.join(FRONTEND, "sw.js")));
+app.get("/manifest.webmanifest", (req, res) =>
+  res.type("application/manifest+json").sendFile(path.join(FRONTEND, "manifest.webmanifest")));
 
 // ---- everything below requires login ---------------------------------------
 app.use((req, res, next) => {
@@ -318,10 +324,73 @@ async function setRentalMode(enabled, meta = {}) {
 }
 
 
+
+// ---- notifications --------------------------------------------------------------
+const notifier = createNotifier({ dataDir: DATA_DIR });
+const BXL = (d, withDay = false) => new Intl.DateTimeFormat("fr-BE", {
+  timeZone: "Europe/Brussels", hour: "2-digit", minute: "2-digit", ...(withDay ? { weekday: "short" } : {}),
+}).format(new Date(d));
+
+app.get("/api/push/config", (req, res) => res.json({ publicKey: notifier.publicKey, types: notifier.types }));
+app.post("/api/push/subscribe", express.json(), (req, res) => {
+  try { res.json(notifier.subscribe(req.body.subscription, req.headers["user-agent"])); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
+app.post("/api/push/get", express.json(), (req, res) => res.json(notifier.getPrefs((req.body || {}).endpoint)));
+app.post("/api/push/prefs", express.json(), (req, res) => {
+  try { res.json(notifier.setPrefs(req.body.endpoint, req.body)); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
+app.post("/api/push/unsubscribe", express.json(), (req, res) => { notifier.unsubscribe((req.body || {}).endpoint); res.json({ ok: true }); });
+app.post("/api/push/test", express.json(), async (req, res) => {
+  try { await notifier.test((req.body || {}).endpoint); res.json({ ok: true }); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
+
+// fin de location non confirmée : une seule notification par location
+setInterval(async () => {
+  const state = readState();
+  const r = state.rental || {};
+  if (!rentalStatus().overdue || r.overdueNotified) return;
+  state.rental.overdueNotified = true;
+  writeState(state);
+  await notifier.notify("rental_overdue", `Location #${r.rentalId} : fin non confirmée`,
+    `Retour prévu ${BXL(r.plannedEnd, true)}, aucun e-mail de fin reçu. Le mode location reste actif.`, { tag: `rental-${r.rentalId}` });
+}, 120000);
+
+// surveillance de la voiture : fin de charge, charge interrompue, batterie basse, connexion perdue
+startVehicleMonitor({
+  notifier,
+  intervalMs: Math.max(10, Number(MONITOR_SECONDS) || 120) * 1000,
+  statePath: path.join(DATA_DIR, "monitor.json"),
+  getMailError: () => {
+    const m = readState().mail || {};
+    return m.lastError ? { since: m.lastErrorSince || m.lastCheck } : null;
+  },
+  getStatus: async () => {
+    const vin = await getVin();
+    if (!vin) throw new Error("VIN inconnu");
+    const info = await psacc(`/get_vehicleinfo/${encodeURIComponent(vin)}?from_cache=1`);
+    const cc = await psacc(`/charge_control?vin=${encodeURIComponent(vin)}`).catch(() => null);
+    const e = (info.energy || []).find((x) => x.type === "Electric") || (info.energy || [])[0] || {};
+    const c = e.charging || {};
+    return {
+      level: Math.round(Number(e.level) || 0),
+      autonomy: e.autonomy ? Math.round(Number(e.autonomy)) : null,
+      chargeStatus: String(c.status || "").split(".").pop() || null,
+      plugged: Boolean(c.plugged),
+      moving: Boolean(info.kinetic && info.kinetic.moving),
+      threshold: cc && cc.percentage_threshold ? Number(cc.percentage_threshold) : 100,
+    };
+  },
+});
+
 // ---- e-mails Getaround → mode location automatique ----------------------------
 function updateMailState(patch) {
   const state = readState();
-  state.mail = { ...(state.mail || {}), ...patch };
+  const mail = { ...(state.mail || {}), ...patch };
+  if ("lastError" in patch) mail.lastErrorSince = patch.lastError ? (state.mail && state.mail.lastErrorSince) || new Date().toISOString() : null;
+  state.mail = mail;
   writeState(state);
 }
 
@@ -346,10 +415,18 @@ async function onGetaroundEvent(event) {
       source: "email", rentalId: event.rentalId,
       plannedEnd: event.plannedEnd ? event.plannedEnd.toISOString() : null,
     });
+    await notifier.notify("rental_start", `Location #${event.rentalId} débutée`,
+      `Voiture ouverte à ${BXL(at)}${event.plannedEnd ? ` · retour prévu ${BXL(event.plannedEnd, true)}` : ""}.`,
+      { tag: `rental-${event.rentalId}` });
   } else if (event.type === "end") {
     if (current.enabled && (!current.rentalId || current.rentalId === event.rentalId)) {
       await setRentalMode(false, { source: "email", rentalId: event.rentalId });
     }
+    const details = [`Voiture fermée à ${BXL(at)}`];
+    if (event.distanceKm != null) details.push(`${event.distanceKm} km parcourus`);
+    if (event.levelPercent != null) details.push(`batterie ${event.levelPercent} %`);
+    await notifier.notify("rental_end", `Location #${event.rentalId} terminée`, details.join(" · ") + ".",
+      { tag: `rental-${event.rentalId}` });
   }
   updateMailState({ lastEvent: summary });
 }
