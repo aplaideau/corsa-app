@@ -17,8 +17,6 @@ const {
   COOKIE_SECURE = "false",
   PSACC_CONFIG_DIR = "/psacc-config", // dossier psacc monté en lecture seule
   DATA_DIR = "/data",                  // état de l'appli (mode location), partagé avec le script de la VM
-  // page « Ouvrir / fermer » (boîtier Connect) de la voiture dans l'espace propriétaire Getaround
-  GETAROUND_URL = "https://fr.be.getaround.com/dashboard/cars/1433374/open_management",
 } = process.env;
 
 if (!APP_PASSWORD_HASH || !SESSION_SECRET) {
@@ -300,7 +298,7 @@ app.get("/get_vehicleinfo/:vin", async (req, res) => {
 app.get("/api/me", async (req, res) => {
   let vin = VIN;
   try { vin = await getVin(); } catch (e) {}
-  res.json({ user: req.session.user, vin, getaroundUrl: GETAROUND_URL });
+  res.json({ user: req.session.user, vin });
 });
 
 app.get(["/corsa", "/seuil", "/setup"], (req, res) => sendApp(res));
