@@ -29,6 +29,8 @@ const {
   MAIL_IMAP_TLS = "true",
   MAIL_CHECK_SECONDS = "120",
   MONITOR_SECONDS = "120",
+  // adresse de contact exigée par les services de notifications (Apple refuse les adresses @localhost)
+  VAPID_SUBJECT = "",
 } = process.env;
 
 if (!APP_PASSWORD_HASH || !SESSION_SECRET) {
@@ -326,7 +328,14 @@ async function setRentalMode(enabled, meta = {}) {
 
 
 // ---- notifications --------------------------------------------------------------
-const notifier = createNotifier({ dataDir: DATA_DIR });
+function vapidSubject() {
+  const raw = (VAPID_SUBJECT || (MAIL_USER.includes("@") ? MAIL_USER : "")).trim();
+  if (/^(mailto:|https:\/\/)/.test(raw)) return raw;
+  if (raw.includes("@")) return `mailto:${raw}`;
+  console.warn("VAPID_SUBJECT absent : les notifications iPhone seront refusées (BadJwtToken). Ajoute VAPID_SUBJECT=ton@email dans .env");
+  return "mailto:corsa-app@example.com";
+}
+const notifier = createNotifier({ dataDir: DATA_DIR, subject: vapidSubject() });
 const BXL = (d, withDay = false) => new Intl.DateTimeFormat("fr-BE", {
   timeZone: "Europe/Brussels", hour: "2-digit", minute: "2-digit", ...(withDay ? { weekday: "short" } : {}),
 }).format(new Date(d));
