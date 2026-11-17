@@ -82,7 +82,21 @@ export const setupOtp = (sms: string, pin: string) => postJson<SetupResult>("/ap
 
 // ---- rental mode -------------------------------------------------------------
 
-export type RentalMode = { enabled: boolean; since: string | null; recording: "on" | "off" | "unknown" };
+export type RentalMode = {
+  enabled: boolean;
+  since: string | null;
+  source: "email" | "manual" | null;
+  rentalId: string | null;
+  plannedEnd: string | null;
+  overdue: boolean;
+  recording: "on" | "off" | "unknown";
+  mail: {
+    configured: boolean;
+    lastCheck: string | null;
+    lastError: string | null;
+    lastUnrecognized: { subject: string; at: string } | null;
+  };
+};
 export const getRentalMode = () => request<RentalMode>("/api/rental-mode");
 export const setRentalMode = (enabled: boolean) => postJson<RentalMode>("/api/rental-mode", { enabled });
 

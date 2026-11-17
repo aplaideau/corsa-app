@@ -79,6 +79,20 @@ sudo cp deploy/corsa-rental-sync.service deploy/corsa-rental-sync.timer /etc/sys
 sudo systemctl daemon-reload && sudo systemctl enable --now corsa-rental-sync.timer
 ```
 
+### Activation automatique par e-mail
+
+Une boîte Gmail dédiée reçoit, via un filtre de transfert de la boîte habituelle (`from:(getaround.com)`),
+les e-mails Getaround. Le serveur la lit toutes les 2 minutes (IMAP, mot de passe d'application) :
+
+- « Location #… débutée » (`rental_starts`) → mode location activé, avec le numéro et le retour prévu ;
+- « Location #… terminée » (`rental_ends`, même numéro) → mode location désactivé ;
+- pas d'e-mail de fin 2 h après le retour prévu → avertissement dans l'appli (rien n'est désactivé seul) ;
+- e-mail Getaround non reconnu → avertissement dans l'appli ;
+- e-mails de plus de 12 h ignorés ; les choix manuels restent prioritaires jusqu'au prochain e-mail.
+
+Seuls le type d'événement, le numéro de location et les heures sont conservés (jamais le nom du locataire).
+Les e-mails sont seulement marqués comme lus. Réglages : `MAIL_USER` et `MAIL_APP_PASSWORD` dans `.env`.
+
 Pour tout arrêter (pause complète) : `sudo docker stop psacc`, puis `sudo docker start psacc`.
 
 ## Développement local

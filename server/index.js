@@ -6,6 +6,7 @@ const express = require("express");
 const cookieSession = require("cookie-session");
 const bcrypt = require("bcryptjs");
 const { createProxyMiddleware } = require("http-proxy-middleware");
+const { startMailWatcher } = require("./getaround-mail");
 
 const {
   APP_USER = "alexandre",
@@ -19,6 +20,13 @@ const {
   DATA_DIR = "/data",                  // état de l'appli (mode location), partagé avec le script de la VM
   // page « Ouvrir / fermer » (boîtier Connect) de la voiture dans l'espace propriétaire Getaround
   GETAROUND_URL = "https://fr.be.getaround.com/dashboard/cars/1433374/open_management",
+  // boîte dédiée qui reçoit (par transfert automatique) les e-mails Getaround
+  MAIL_USER = "",
+  MAIL_APP_PASSWORD = "",
+  MAIL_IMAP_HOST = "imap.gmail.com",
+  MAIL_IMAP_PORT = "993",
+  MAIL_IMAP_TLS = "true",
+  MAIL_CHECK_SECONDS = "120",
 } = process.env;
 
 if (!APP_PASSWORD_HASH || !SESSION_SECRET) {
@@ -246,17 +254,46 @@ function writeState(state) {
 }
 const rentalActive = () => Boolean(readState().rental && readState().rental.enabled);
 
+const OVERDUE_MS = 2 * 3600 * 1000;   // fin non confirmée 2 h après le retour prévu
+const EVENT_MAX_AGE_MS = 12 * 3600 * 1000; // un e-mail plus ancien n'agit plus (ex. vieux e-mails non lus)
+
 function rentalStatus() {
-  const r = readState().rental || { enabled: false };
+  const state = readState();
+  const r = state.rental || { enabled: false };
+  const mail = state.mail || {};
   let recording = "unknown";
   try { recording = fs.readFileSync(RECORDING_FILE, "utf8").trim(); } catch (e) {}
-  return { enabled: Boolean(r.enabled), since: r.since || null, recording };
+  const plannedEnd = r.plannedEnd ? new Date(r.plannedEnd) : null;
+  const recent = (x) => x && Date.now() - new Date(x.at).getTime() < 7 * 24 * 3600 * 1000;
+  return {
+    enabled: Boolean(r.enabled),
+    since: r.since || null,
+    source: r.source || null,
+    rentalId: r.rentalId || null,
+    plannedEnd: r.plannedEnd || null,
+    overdue: Boolean(r.enabled && plannedEnd && Date.now() > plannedEnd.getTime() + OVERDUE_MS),
+    recording,
+    mail: {
+      configured: Boolean(MAIL_USER && MAIL_APP_PASSWORD),
+      lastCheck: mail.lastCheck || null,
+      lastError: mail.lastError || null,
+      lastEvent: mail.lastEvent || null,
+      lastUnrecognized: recent(mail.lastUnrecognized) ? mail.lastUnrecognized : null,
+    },
+  };
 }
 
-async function setRentalMode(enabled) {
+async function setRentalMode(enabled, meta = {}) {
   const state = readState();
   const current = state.rental || {};
-  if (Boolean(current.enabled) === enabled) return rentalStatus();
+  if (Boolean(current.enabled) === enabled) {
+    // déjà dans le bon mode (ex. activé à la main) : on complète seulement les infos de location
+    if (enabled && meta.rentalId) {
+      state.rental = { ...current, rentalId: meta.rentalId, plannedEnd: meta.plannedEnd || current.plannedEnd || null };
+      writeState(state);
+    }
+    return rentalStatus();
+  }
   if (enabled) {
     // couper ABRP (il reçoit la position) en mémorisant ce qui était actif
     let abrpVins = [];
@@ -265,16 +302,70 @@ async function setRentalMode(enabled) {
       abrpVins = abrp.abrp_enable_vin || [];
       for (const v of abrpVins) await psacc(`/abrp?vin=${encodeURIComponent(v)}&enable=0`);
     } catch (e) { console.warn("mode location : ABRP non modifié", e.message); }
-    state.rental = { enabled: true, since: new Date().toISOString(), abrpVins };
+    state.rental = {
+      enabled: true, since: new Date().toISOString(), abrpVins,
+      source: meta.source || "manual", rentalId: meta.rentalId || null, plannedEnd: meta.plannedEnd || null,
+    };
   } else {
     for (const v of current.abrpVins || []) {
       try { await psacc(`/abrp?vin=${encodeURIComponent(v)}&enable=1`); } catch (e) {}
     }
-    state.rental = { enabled: false, since: null };
+    state.rental = { enabled: false, since: null, source: meta.source || "manual" };
   }
   writeState(state);
-  console.log(`mode location ${enabled ? "activé" : "désactivé"}`);
+  console.log(`mode location ${enabled ? "activé" : "désactivé"} (${meta.source || "manuel"}${meta.rentalId ? `, location #${meta.rentalId}` : ""})`);
   return rentalStatus();
+}
+
+
+// ---- e-mails Getaround → mode location automatique ----------------------------
+function updateMailState(patch) {
+  const state = readState();
+  state.mail = { ...(state.mail || {}), ...patch };
+  writeState(state);
+}
+
+async function onGetaroundEvent(event) {
+  const at = new Date(event.at);
+  const summary = { type: event.type, rentalId: event.rentalId || null, at: at.toISOString() };
+  if (event.type === "unrecognized") {
+    updateMailState({ lastUnrecognized: { subject: event.subject, at: at.toISOString() } });
+    return;
+  }
+  if (Date.now() - at.getTime() > EVENT_MAX_AGE_MS) {
+    updateMailState({ lastEvent: { ...summary, ignored: "trop ancien" } });
+    return;
+  }
+  const current = readState().rental || {};
+  if (event.type === "start") {
+    if (event.plannedEnd && event.plannedEnd.getTime() < Date.now()) {
+      updateMailState({ lastEvent: { ...summary, ignored: "location déjà terminée" } });
+      return;
+    }
+    await setRentalMode(true, {
+      source: "email", rentalId: event.rentalId,
+      plannedEnd: event.plannedEnd ? event.plannedEnd.toISOString() : null,
+    });
+  } else if (event.type === "end") {
+    if (current.enabled && (!current.rentalId || current.rentalId === event.rentalId)) {
+      await setRentalMode(false, { source: "email", rentalId: event.rentalId });
+    }
+  }
+  updateMailState({ lastEvent: summary });
+}
+
+if (MAIL_USER && MAIL_APP_PASSWORD) {
+  startMailWatcher({
+    user: MAIL_USER,
+    password: MAIL_APP_PASSWORD.replace(/\s+/g, ""), // Google affiche le mot de passe par blocs de 4
+    host: MAIL_IMAP_HOST,
+    port: Number(MAIL_IMAP_PORT),
+    secure: MAIL_IMAP_TLS !== "false",
+    intervalMs: Math.max(30, Number(MAIL_CHECK_SECONDS) || 120) * 1000,
+    onEvent: onGetaroundEvent,
+    onStatus: updateMailState,
+  });
+  console.log(`relève des e-mails Getaround activée (${MAIL_USER}, toutes les ${Math.max(30, Number(MAIL_CHECK_SECONDS) || 120)} s)`);
 }
 
 app.get("/api/rental-mode", (req, res) => res.json(rentalStatus()));

@@ -13,6 +13,8 @@
     "bcryptjs": "^2.4.3",
     "cookie-session": "^2.1.0",
     "express": "^4.21.2",
-    "http-proxy-middleware": "^3.0.3"
+    "http-proxy-middleware": "^3.0.3",
+    "imapflow": "^2.12.1",
+    "mailparser": "^3.14.5"
   }
 }

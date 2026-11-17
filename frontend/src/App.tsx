@@ -767,7 +767,10 @@ function Dashboard({ onLoggedOut }: { onLoggedOut: () => void }) {
   // psacc refreshes the car state on its own: re-read its cache every minute.
   useEffect(() => {
     if (!vin) return;
-    const timer = window.setInterval(() => void refresh(vin), 60_000);
+    const timer = window.setInterval(() => {
+      void refresh(vin);
+      getRentalMode().then(setRental).catch(() => undefined);
+    }, 60_000);
     return () => window.clearInterval(timer);
   }, [vin, refresh]);
 
@@ -833,6 +836,20 @@ function Dashboard({ onLoggedOut }: { onLoggedOut: () => void }) {
   };
 
   const updatedLabel = vehicle.updatedAt ? formatTime(vehicle.updatedAt) : null;
+  const formatDayTime = (iso: string) =>
+    new Intl.DateTimeFormat("fr-BE", { weekday: "short", hour: "2-digit", minute: "2-digit" }).format(new Date(iso));
+  const rentalBanner = !rentalOn
+    ? ""
+    : rental?.overdue && rental.rentalId
+      ? `Location #${rental.rentalId} : fin non confirmée (retour prévu ${formatDayTime(rental.plannedEnd!)})`
+      : rental?.rentalId
+        ? `Location #${rental.rentalId} en cours${rental.plannedEnd ? ` · retour prévu ${formatDayTime(rental.plannedEnd)}` : ""}`
+        : "Mode location · position masquée";
+  const mailInfo = rental?.mail?.configured
+    ? rental.mail.lastError
+      ? "⚠️ Lecture des e-mails Getaround en échec"
+      : `Automatique via les e-mails Getaround${rental.mail.lastCheck ? ` · lus à ${formatTime(new Date(rental.mail.lastCheck))}` : ""}`
+    : null;
   const powerKw = estimatePowerKw(vehicle);
   const statusText = vehicle.driving
     ? `En route${vehicle.speedKmh ? ` · ${vehicle.speedKmh} km/h` : ""}`
@@ -885,10 +902,18 @@ function Dashboard({ onLoggedOut }: { onLoggedOut: () => void }) {
           <button className="setup-banner" onClick={() => setMenuOpen(true)} type="button">
             <Icon name="lock" size={18} />
             <span>
-              Mode location · position masquée
+              {rentalBanner}
               {rental?.recording === "on" ? " (application en cours…)" : ""}
             </span>
             <span>Gérer</span>
+          </button>
+        )}
+
+        {rental?.mail?.lastUnrecognized && (
+          <button className="setup-banner" onClick={() => setMenuOpen(true)} type="button">
+            <Icon name="gear" size={18} />
+            <span>E-mail Getaround non reconnu : « {rental.mail.lastUnrecognized.subject} »</span>
+            <span>Vérifier</span>
           </button>
         )}
 
@@ -1107,6 +1132,12 @@ function Dashboard({ onLoggedOut }: { onLoggedOut: () => void }) {
                 : rentalOn
                   ? "Position masquée, trajets non enregistrés"
                   : "À activer pendant une location Getaround"}
+              {mailInfo && (
+                <>
+                  <br />
+                  {mailInfo}
+                </>
+              )}
             </small>
           </span>
           <span className={`toggle ${rentalOn ? "on" : ""}`}>
