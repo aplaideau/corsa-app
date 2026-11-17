@@ -662,8 +662,8 @@ const emptyVehicle: VehicleSnapshot = {
   address: "",
 };
 
-// Universal link: opens the Getaround app when installed, the website otherwise.
-const GETAROUND_URL = "https://fr.getaround.com/";
+// Page « Ouvrir / fermer » de la voiture chez Getaround (fournie par le serveur, variable GETAROUND_URL).
+const GETAROUND_FALLBACK_URL = "https://fr.be.getaround.com/dashboard";
 
 const THEME_KEY = "corsa-theme";
 const readTheme = () => {
@@ -682,6 +682,7 @@ function Dashboard({ onLoggedOut }: { onLoggedOut: () => void }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [configurationOpen, setConfigurationOpen] = useState(window.location.pathname === "/setup");
   const [vin, setVin] = useState("");
+  const [getaroundUrl, setGetaroundUrl] = useState(GETAROUND_FALLBACK_URL);
   const [setup, setSetup] = useState<SetupStatus | null>(null);
   const [vehicle, setVehicle] = useState<VehicleSnapshot>(emptyVehicle);
   const [loaded, setLoaded] = useState(false);
@@ -747,6 +748,7 @@ function Dashboard({ onLoggedOut }: { onLoggedOut: () => void }) {
       ]);
       setSetup(status);
       setRental(rentalMode);
+      if (me.getaroundUrl) setGetaroundUrl(me.getaroundUrl);
       const currentVin = me.vin || status.vin || "";
       setVin(currentVin);
       if (status.psacc && !status.loggedIn) setConfigurationOpen(true);
@@ -1124,7 +1126,7 @@ function Dashboard({ onLoggedOut }: { onLoggedOut: () => void }) {
           className="option-row"
           onClick={() => {
             setMenuOpen(false);
-            window.open(GETAROUND_URL, "_blank", "noopener,noreferrer");
+            window.open(getaroundUrl, "_blank", "noopener,noreferrer");
           }}
           type="button"
         >
@@ -1133,7 +1135,7 @@ function Dashboard({ onLoggedOut }: { onLoggedOut: () => void }) {
           </span>
           <span>
             <strong>Ouvrir / fermer via Getaround</strong>
-            <small>Lance l’application Getaround (boîtier Connect)</small>
+            <small>Page Getaround de la voiture (boîtier Connect)</small>
           </span>
           <Icon name="chevron" size={19} />
         </button>
