@@ -3,6 +3,7 @@ import {
   ApiError,
   getMe,
   getSetupStatus,
+  dismissUnrecognizedMail,
   getRentalMode,
   getVehicleStatus,
   login,
@@ -696,7 +697,7 @@ function Dashboard({ onLoggedOut }: { onLoggedOut: () => void }) {
   const [setup, setSetup] = useState<SetupStatus | null>(null);
   const [vehicle, setVehicle] = useState<VehicleSnapshot>(emptyVehicle);
   const [loaded, setLoaded] = useState(false);
-  const [offline, setOffline] = useState(false);
+  const [offline, setOffline] = useState<false | "server" | "psacc">(false);
   const [syncing, setSyncing] = useState(true);
   const [toast, setToast] = useState("");
   const [draftLimit, setDraftLimit] = useState<number | null>(null);
@@ -740,7 +741,7 @@ function Dashboard({ onLoggedOut }: { onLoggedOut: () => void }) {
         setOffline(false);
         setLoaded(true);
       } catch (e) {
-        setOffline(true);
+        setOffline(e instanceof ApiError && e.status === 0 ? "server" : "psacc");
         if (e instanceof ApiError && e.status === 401) onLoggedOut();
       } finally {
         setSyncing(false);
@@ -765,7 +766,8 @@ function Dashboard({ onLoggedOut }: { onLoggedOut: () => void }) {
       await refresh(currentVin);
     } catch (e) {
       setSyncing(false);
-      handleError(e);
+      if (e instanceof ApiError && e.status === 0) setOffline("server");
+      else handleError(e);
     }
   }, [refresh, handleError]);
 
@@ -893,7 +895,7 @@ function Dashboard({ onLoggedOut }: { onLoggedOut: () => void }) {
               <span>·</span>
               <span>{loaded ? `${vehicle.rangeKm} km` : "—"}</span>
               <span className={`sync-state ${syncing ? "syncing" : ""} ${offline && !syncing ? "error" : ""}`}>
-                {syncing ? "Synchronisation…" : offline ? "Hors ligne" : "Connectée"}
+                {syncing ? "Synchronisation…" : offline === "server" ? "Serveur injoignable" : offline ? "Hors ligne" : "Connectée"}
               </span>
             </div>
           </div>
@@ -919,11 +921,17 @@ function Dashboard({ onLoggedOut }: { onLoggedOut: () => void }) {
         )}
 
         {rental?.mail?.lastUnrecognized && (
-          <button className="setup-banner" onClick={() => setMenuOpen(true)} type="button">
+          <div className="setup-banner">
             <Icon name="gear" size={18} />
             <span>E-mail Getaround non reconnu : « {rental.mail.lastUnrecognized.subject} »</span>
-            <span>Vérifier</span>
-          </button>
+            <button
+              className="banner-action"
+              onClick={() => void dismissUnrecognizedMail().then(setRental).catch(handleError)}
+              type="button"
+            >
+              Ignorer
+            </button>
+          </div>
         )}
 
         {setup?.loggedIn && !setup.otp && (
@@ -948,7 +956,6 @@ function Dashboard({ onLoggedOut }: { onLoggedOut: () => void }) {
                 <Icon name="bolt" size={18} /> Recharge en cours
               </div>
             )}
-            {vehicle.driving && <div className="drive-badge">MODE ÉLECTRIQUE</div>}
           </div>
         </section>
 
@@ -1082,11 +1089,15 @@ function Dashboard({ onLoggedOut }: { onLoggedOut: () => void }) {
         </section>
 
         <div className="demo-note">
-          <span>{offline ? "PSACC INJOIGNABLE" : "DONNÉES DU VÉHICULE"}</span>
+          <span>
+            {offline === "server" ? "SERVEUR INJOIGNABLE" : offline ? "PSACC INJOIGNABLE" : "DONNÉES DU VÉHICULE"}
+          </span>
           <p>
-            {offline
-              ? "Le serveur ne répond pas : psacc est peut-être en pause (location) ou la VM est arrêtée."
-              : "La voiture transmet son état toutes les quelques minutes ; une commande met 1 à 2 minutes à s’appliquer."}
+            {offline === "server"
+              ? "Ton serveur ne répond pas. Sur un Wi-Fi d’entreprise, Tailscale est souvent bloqué : passe en 4G/5G et vérifie que Tailscale est activé."
+              : offline
+                ? "Le serveur répond, mais pas psacc : il est peut-être en pause (location) ou en cours de redémarrage."
+                : "La voiture transmet son état toutes les quelques minutes ; une commande met 1 à 2 minutes à s’appliquer."}
           </p>
         </div>
       </main>

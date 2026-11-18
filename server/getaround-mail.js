@@ -87,6 +87,12 @@ function parseGetaroundEmail({ subject = "", from = "", text = "", html = "", da
   };
 }
 
+/** Objet du type « Location #123 débutée / commencée / terminée / finie / clôturée … » */
+function looksLikeRentalStartOrEnd(subject = "") {
+  return /Location\s*(?:n°\s*)?#?\s*\d{5,}/i.test(subject) &&
+    /(débu|commenc|démarr|termin|fini|clôtur|achev|rendu)/i.test(subject);
+}
+
 /**
  * Relève la boîte toutes les `intervalMs` et appelle `onEvent(event)` pour chaque e-mail reconnu.
  * `onStatus({lastCheck, lastError})` informe l'appli de l'état de la relève.
@@ -118,9 +124,11 @@ function startMailWatcher({ user, password, host = "imap.gmail.com", port = 993,
                 date: mail.date || new Date(msg.internalDate),
               });
               if (event) await onEvent(event);
-              else if (/getaround/i.test(`${mail.from && mail.from.text} ${mail.subject}`)) {
+              else if (looksLikeRentalStartOrEnd(mail.subject)) {
+                // ressemble à un début / une fin de location mais illisible : Getaround a peut-être changé ses e-mails
                 await onEvent({ type: "unrecognized", subject: String(mail.subject || "").slice(0, 120), at: mail.date || new Date() });
               }
+              // les autres e-mails Getaround (demandes, messages, versements…) sont ignorés en silence
             } catch (e) {
               log.warn("e-mail Getaround illisible :", e.message);
             }
@@ -146,4 +154,4 @@ function startMailWatcher({ user, password, host = "imap.gmail.com", port = 993,
   return { stop: () => clearInterval(timer), checkOnce };
 }
 
-module.exports = { parseGetaroundEmail, startMailWatcher, brusselsDate };
+module.exports = { parseGetaroundEmail, startMailWatcher, brusselsDate, looksLikeRentalStartOrEnd };

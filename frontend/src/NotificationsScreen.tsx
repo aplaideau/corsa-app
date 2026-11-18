@@ -56,16 +56,23 @@ export function NotificationsScreen({
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [serverDown, setServerDown] = useState(false);
 
   useEffect(() => {
-    getTypes().then(setTypes).catch(() => undefined);
+    getTypes()
+      .then(setTypes)
+      .catch(() => setServerDown(true));
     if (!support.ok) return;
     currentSubscription().then(async (sub) => {
       if (!sub) return;
-      const p = await getPushPrefs(sub.endpoint).catch(() => null);
-      if (p) {
-        setEndpoint(sub.endpoint);
-        setPrefs(p);
+      try {
+        const p = await getPushPrefs(sub.endpoint);
+        if (p) {
+          setEndpoint(sub.endpoint);
+          setPrefs(p);
+        }
+      } catch {
+        setServerDown(true);
       }
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -124,7 +131,16 @@ export function NotificationsScreen({
         </header>
 
         <section className="configuration-card notif-card">
-          {!support.ok ? (
+          {serverDown ? (
+            <>
+              <h3>Serveur injoignable</h3>
+              <p>
+                Impossible de lire tes réglages : ton serveur ne répond pas. Sur un Wi-Fi d’entreprise, Tailscale
+                est souvent bloqué : passe en 4G/5G puis rouvre cet écran.
+              </p>
+              <p>Tes notifications continuent d’arriver normalement, même sur ce Wi-Fi.</p>
+            </>
+          ) : !support.ok ? (
             <>
               <h3>Pas encore disponible ici</h3>
               <p>{REASONS[support.reason]}</p>

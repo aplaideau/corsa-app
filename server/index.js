@@ -272,7 +272,7 @@ function rentalStatus() {
   let recording = "unknown";
   try { recording = fs.readFileSync(RECORDING_FILE, "utf8").trim(); } catch (e) {}
   const plannedEnd = r.plannedEnd ? new Date(r.plannedEnd) : null;
-  const recent = (x) => x && Date.now() - new Date(x.at).getTime() < 7 * 24 * 3600 * 1000;
+  const recent = (x) => x && !x.dismissed && Date.now() - new Date(x.at).getTime() < 7 * 24 * 3600 * 1000;
   return {
     enabled: Boolean(r.enabled),
     since: r.since || null,
@@ -455,6 +455,13 @@ if (MAIL_USER && MAIL_APP_PASSWORD) {
 }
 
 app.get("/api/rental-mode", (req, res) => res.json(rentalStatus()));
+// bouton « Ignorer » du bandeau « e-mail Getaround non reconnu »
+app.post("/api/mail/dismiss-unrecognized", (req, res) => {
+  const state = readState();
+  if (state.mail && state.mail.lastUnrecognized) state.mail.lastUnrecognized.dismissed = true;
+  writeState(state);
+  res.json(rentalStatus());
+});
 app.post("/api/rental-mode", express.json(), async (req, res) => {
   try { res.json(await setRentalMode(Boolean((req.body || {}).enabled))); }
   catch (e) { res.status(500).json({ error: e.message }); }

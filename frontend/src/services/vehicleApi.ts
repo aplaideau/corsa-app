@@ -99,6 +99,7 @@ export type RentalMode = {
 };
 export const getRentalMode = () => request<RentalMode>("/api/rental-mode");
 export const setRentalMode = (enabled: boolean) => postJson<RentalMode>("/api/rental-mode", { enabled });
+export const dismissUnrecognizedMail = () => postJson<RentalMode>("/api/mail/dismiss-unrecognized");
 
 // ---- vehicle ---------------------------------------------------------------
 

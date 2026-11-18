@@ -1302,3 +1302,15 @@
     var(--surface-2) var(--progress) 100%
   );
 }
+
+.banner-action {
+  margin-left: auto;
+  padding: 6px 10px;
+  border: 1px solid var(--accent-strong);
+  border-radius: 9px;
+  background: transparent;
+  color: var(--accent-strong);
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+}
