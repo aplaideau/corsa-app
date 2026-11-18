@@ -694,6 +694,7 @@ function Dashboard({ onLoggedOut }: { onLoggedOut: () => void }) {
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [vin, setVin] = useState("");
   const [getaroundUrl, setGetaroundUrl] = useState(GETAROUND_FALLBACK_URL);
+  const [version, setVersion] = useState("");
   const [setup, setSetup] = useState<SetupStatus | null>(null);
   const [vehicle, setVehicle] = useState<VehicleSnapshot>(emptyVehicle);
   const [loaded, setLoaded] = useState(false);
@@ -760,6 +761,7 @@ function Dashboard({ onLoggedOut }: { onLoggedOut: () => void }) {
       setSetup(status);
       setRental(rentalMode);
       if (me.getaroundUrl) setGetaroundUrl(me.getaroundUrl);
+      if (me.version) setVersion(me.version);
       const currentVin = me.vin || status.vin || "";
       setVin(currentVin);
       if (status.psacc && !status.loggedIn) setConfigurationOpen(true);
@@ -1249,7 +1251,10 @@ function Dashboard({ onLoggedOut }: { onLoggedOut: () => void }) {
           </span>
           <Icon name="chevron" size={19} />
         </button>
-        <p className="panel-footnote">Corsa-e{vin ? ` · VIN …${vin.slice(-6)}` : ""}</p>
+        <p className="panel-footnote">
+          Corsa-e{vin ? ` · VIN …${vin.slice(-6)}` : ""}
+          {version ? ` · version ${version}` : ""}
+        </p>
       </aside>
 
       <div className={`toast ${toast ? "show" : ""}`}>{toast}</div>

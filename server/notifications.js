@@ -14,6 +14,7 @@ const TYPES = {
   charge_interrupted: "Charge interrompue",
   battery_low: "Batterie basse",
   technical: "Problème technique",
+  update: "Mise à jour installée",
 };
 const DEFAULT_PREFS = Object.fromEntries(Object.keys(TYPES).map((t) => [t, true]));
 const DEFAULT_LOW_BATTERY = 20;

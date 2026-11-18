@@ -65,7 +65,8 @@ const postJson = <T>(url: string, body?: unknown) =>
 
 // ---- session ---------------------------------------------------------------
 
-export const getMe = () => request<{ user: string; vin: string; getaroundUrl?: string }>("/api/me");
+export const getMe = () =>
+  request<{ user: string; vin: string; getaroundUrl?: string; version?: string }>("/api/me");
 export const login = (user: string, password: string, remember: boolean) =>
   postJson<{ ok: boolean }>("/api/login", { user, password, remember });
 export const logout = () => postJson<{ ok: boolean }>("/api/logout");

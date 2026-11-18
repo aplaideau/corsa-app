@@ -49,11 +49,23 @@ sudo docker compose ps
 
 La configuration psacc existante (`~/psacc` : MyOpel, OTP, limite de charge) est réutilisée telle quelle.
 
-## Mettre à jour
+## Mises à jour automatiques
+
+La VM vérifie toutes les 5 minutes (`deploy/auto-update.sh`, timer systemd) s'il y a du nouveau sur GitHub :
+configuration du dépôt (`git pull`) et nouvelle image publiée par GitHub Actions. Elle ne redémarre que ce qui a
+changé et respecte le mode location. Journal : `data/auto-update.log`.
+
+Installation (une fois) :
 
 ```bash
-cd ~/corsa && git pull && sudo docker compose pull && sudo docker compose up -d
+cd ~/corsa && git pull
+sudo cp deploy/corsa-auto-update.service deploy/corsa-auto-update.timer /etc/systemd/system/
+sudo systemctl daemon-reload && sudo systemctl enable --now corsa-auto-update.timer
 ```
+
+Après chaque mise à jour, une notification « Mise à jour installée » liste les nouveautés : ce sont les lignes
+`Changelog: …` (en français) des messages de commit. Mise à jour manuelle si besoin :
+`cd ~/corsa && git pull && sudo docker compose pull && sudo docker compose up -d`.
 
 ## Mode location
 

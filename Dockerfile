@@ -8,7 +8,8 @@ RUN npm run build
 
 # ---- 2. Node server: login, setup, psacc proxy ----------------------------
 FROM node:22-alpine
-ENV NODE_ENV=production
+ARG APP_VERSION=dev
+ENV NODE_ENV=production APP_VERSION=$APP_VERSION
 WORKDIR /app
 COPY server/package.json server/package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force

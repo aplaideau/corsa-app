@@ -19,6 +19,7 @@ const ORDER = [
   "charge_interrupted",
   "battery_low",
   "technical",
+  "update",
 ];
 
 const HINTS: Record<string, string> = {
@@ -29,6 +30,7 @@ const HINTS: Record<string, string> = {
   charge_interrupted: "Arrêt avant la limite",
   battery_low: "Voiture garée, batterie sous le seuil",
   technical: "Connexion à la voiture ou e-mails en panne",
+  update: "Nouvelle version installée, avec les nouveautés",
 };
 
 const REASONS: Record<string, string> = {

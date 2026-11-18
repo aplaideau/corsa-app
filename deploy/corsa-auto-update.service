@@ -1,0 +1,8 @@
+[Unit]
+Description=Corsa-e : installe automatiquement les mises à jour publiées sur GitHub
+After=docker.service network-online.target
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/home/opc/corsa/deploy/auto-update.sh

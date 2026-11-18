@@ -356,6 +356,34 @@ app.post("/api/push/test", express.json(), async (req, res) => {
   catch (e) { res.status(400).json({ error: e.message }); }
 });
 
+// mise à jour installée : au démarrage, si la version a changé, notification avec les nouveautés
+// (changelog.tsv est généré par GitHub Actions : sha, date, sujet, lignes « Changelog: » en français)
+const APP_VERSION = process.env.APP_VERSION || "dev";
+function changelogSince(previous) {
+  let lines = [];
+  try { lines = fs.readFileSync(path.join(__dirname, "changelog.tsv"), "utf8").split("\n").filter(Boolean); } catch (e) { return []; }
+  const items = [];
+  for (const line of lines) {                       // du plus récent au plus ancien
+    const [sha, , , trailers = ""] = line.split("\t");
+    if (previous && sha.startsWith(previous)) break;
+    // seules les lignes « Changelog: » (en français) sont annoncées ; le reste est interne
+    items.push(...trailers.split("\x1f").map((t) => t.trim()).filter(Boolean));
+  }
+  return items;
+}
+setTimeout(async () => {
+  if (APP_VERSION === "dev") return;
+  const file = path.join(DATA_DIR, "version.json");
+  let previous = null;
+  try { previous = JSON.parse(fs.readFileSync(file, "utf8")).version; } catch (e) {}
+  if (previous === APP_VERSION) return;
+  fs.writeFileSync(file, JSON.stringify({ version: APP_VERSION, installedAt: new Date().toISOString() }));
+  if (!previous) return; // première installation : rien à annoncer
+  const items = changelogSince(previous).slice(0, 6);
+  const body = items.length ? items.map((i) => `• ${i}`).join("\n") : "• Corrections et améliorations internes";
+  await notifier.notify("update", "Mise à jour installée", body, { tag: "update" });
+}, 20000);
+
 // fin de location non confirmée : une seule notification par location
 setInterval(async () => {
   const state = readState();
@@ -484,7 +512,7 @@ app.get("/get_vehicleinfo/:vin", async (req, res) => {
 app.get("/api/me", async (req, res) => {
   let vin = VIN;
   try { vin = await getVin(); } catch (e) {}
-  res.json({ user: req.session.user, vin, getaroundUrl: GETAROUND_URL });
+  res.json({ user: req.session.user, vin, getaroundUrl: GETAROUND_URL, version: APP_VERSION.slice(0, 7) });
 });
 
 app.get(["/corsa", "/seuil", "/setup"], (req, res) => sendApp(res));
