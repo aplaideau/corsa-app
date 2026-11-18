@@ -5,4 +5,4 @@ Requires=docker.service
 
 [Service]
 Type=oneshot
-ExecStart=/home/opc/corsa/deploy/rental-sync.sh
+ExecStart=/bin/bash /home/opc/corsa/deploy/rental-sync.sh
