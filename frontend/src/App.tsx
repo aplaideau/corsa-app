@@ -26,6 +26,7 @@ type IconName =
   | "arrowLeft"
   | "battery"
   | "bolt"
+  | "calendar"
   | "car"
   | "check"
   | "chevron"
@@ -61,6 +62,12 @@ const icons: Record<IconName, ReactNode> = {
     </>
   ),
   bolt: <path d="m13 2-8 12h7l-1 8 8-12h-7l1-8Z" />,
+  calendar: (
+    <>
+      <rect x="3" y="5" width="18" height="16" rx="2" />
+      <path d="M3 10h18M8 3v4M16 3v4" />
+    </>
+  ),
   car: (
     <>
       <path d="m5 16-2-1v-3l2-1 2-5h10l2 5 2 1v3l-2 1" />
@@ -858,6 +865,23 @@ function Dashboard({ onLoggedOut }: { onLoggedOut: () => void }) {
       : rental?.rentalId
         ? `Location #${rental.rentalId} en cours${rental.plannedEnd ? ` · retour prévu ${formatDayTime(rental.plannedEnd)}` : ""}`
         : "Mode location · position masquée";
+  const next = rental?.nextRental ?? null;
+  const formatSlot = (iso: string) =>
+    new Intl.DateTimeFormat("fr-BE", {
+      weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit",
+    }).format(new Date(iso));
+  const daysUntil = (iso: string) => {
+    const day = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+    return Math.round((day(new Date(iso)) - day(new Date())) / 86400000);
+  };
+  const nextRentalText = next
+    ? new Date(next.start).getTime() <= Date.now()
+      ? `Location prévue depuis ${formatSlot(next.start)} · en attente du locataire`
+      : `Prochaine location : ${formatSlot(next.start)} → ${formatSlot(next.end)}${(() => {
+          const d = daysUntil(next.start);
+          return d === 0 ? " (aujourd’hui)" : d === 1 ? " (demain)" : ` (dans ${d} jours)`;
+        })()}`
+    : "Aucune location prévue";
   const mailInfo = rental?.mail?.configured
     ? rental.mail.lastError
       ? "⚠️ Lecture des e-mails Getaround en échec"
@@ -920,6 +944,13 @@ function Dashboard({ onLoggedOut }: { onLoggedOut: () => void }) {
             </span>
             <span>Gérer</span>
           </button>
+        )}
+
+        {!rentalOn && rental?.mail?.configured && (
+          <div className={`setup-banner next-rental ${next ? "" : "empty"}`}>
+            <Icon name="calendar" size={18} />
+            <span>{nextRentalText}</span>
+          </div>
         )}
 
         {rental?.mail?.lastUnrecognized && (

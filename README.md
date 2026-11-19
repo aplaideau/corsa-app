@@ -103,6 +103,11 @@ les e-mails Getaround. Le serveur la lit toutes les 2 minutes (IMAP, mot de pass
 - e-mails de plus de 12 h ignorés ; les choix manuels restent prioritaires jusqu'au prochain e-mail.
 
 Seuls le type d'événement, le numéro de location et les heures sont conservés (jamais le nom du locataire).
+Planning des prochaines locations (bandeau « Prochaine location » / « Aucune location prévue ») :
+- « location confirmée » → ajoutée ; « modification confirmée » → nouvelles dates ; « annulée » → retirée ;
+- au démarrage, les e-mails de réservation des 30 derniers jours sont relus pour reconstruire le planning ;
+- rappel la veille à 19:00 (ou dès la réservation si elle arrive après), type de notification « Rappel de location ».
+
 Les e-mails sont seulement marqués comme lus. Réglages : `MAIL_USER` et `MAIL_APP_PASSWORD` dans `.env`.
 
 Pour tout arrêter (pause complète) : `sudo docker stop psacc`, puis `sudo docker start psacc`.

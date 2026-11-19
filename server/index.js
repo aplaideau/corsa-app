@@ -6,7 +6,8 @@ const express = require("express");
 const cookieSession = require("cookie-session");
 const bcrypt = require("bcryptjs");
 const { createProxyMiddleware } = require("http-proxy-middleware");
-const { startMailWatcher } = require("./getaround-mail");
+const { startMailWatcher, BOOKING_TYPES, brusselsDate } = require("./getaround-mail");
+const { createSchedule } = require("./schedule");
 const { createNotifier, startVehicleMonitor } = require("./notifications");
 
 const {
@@ -260,6 +261,7 @@ function writeState(state) {
   fs.writeFileSync(STATE_FILE + ".tmp", JSON.stringify(state));
   fs.renameSync(STATE_FILE + ".tmp", STATE_FILE);
 }
+const schedule = createSchedule({ dataDir: DATA_DIR });
 const rentalActive = () => Boolean(readState().rental && readState().rental.enabled);
 
 const OVERDUE_MS = 2 * 3600 * 1000;   // fin non confirmée 2 h après le retour prévu
@@ -281,6 +283,7 @@ function rentalStatus() {
     plannedEnd: r.plannedEnd || null,
     overdue: Boolean(r.enabled && plannedEnd && Date.now() > plannedEnd.getTime() + OVERDUE_MS),
     recording,
+    nextRental: schedule.next(),
     mail: {
       configured: Boolean(MAIL_USER && MAIL_APP_PASSWORD),
       lastCheck: mail.lastCheck || null,
@@ -395,6 +398,37 @@ setInterval(async () => {
     `Retour prévu ${BXL(r.plannedEnd, true)}, aucun e-mail de fin reçu. Le mode location reste actif.`, { tag: `rental-${r.rentalId}` });
 }, 120000);
 
+// rappel de location : la veille à 19:00 (ou tout de suite si la réservation arrive après)
+const bxlParts = (d) => Object.fromEntries(new Intl.DateTimeFormat("en-GB", {
+  timeZone: "Europe/Brussels", year: "numeric", month: "2-digit", day: "2-digit",
+}).formatToParts(new Date(d)).map((p) => [p.type, p.value]));
+const bxlDay = (d) => { const p = bxlParts(d); return Date.UTC(+p.year, +p.month - 1, +p.day); };
+const BXL_DATE = (d) => new Intl.DateTimeFormat("fr-BE", {
+  timeZone: "Europe/Brussels", weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit",
+}).format(new Date(d));
+function reminderTime(r) {
+  const p = bxlParts(r.start);
+  const eve = brusselsDate(+p.year, +p.month - 1, +p.day - 1, 19, 0);
+  const bookedAt = new Date(r.bookedAt || 0);
+  return bookedAt > eve ? bookedAt : eve;
+}
+async function checkRentalReminders() {
+  const now = Date.now();
+  for (const r of schedule.upcoming()) {
+    const start = new Date(r.start).getTime();
+    if (r.reminded || start <= now || reminderTime(r).getTime() > now) continue;
+    schedule.markReminded(r.rentalId);
+    const days = Math.round((bxlDay(r.start) - bxlDay(now)) / 86400000);
+    const when = days === 0 ? "aujourd'hui" : days === 1 ? "demain" : null;
+    const hour = BXL(r.start);
+    await notifier.notify("rental_reminder",
+      when ? `Location ${when} à ${hour}` : `Location le ${BXL_DATE(r.start)}`,
+      `Location #${r.rentalId} : ${BXL_DATE(r.start)} → ${BXL_DATE(r.end)}.`,
+      { tag: `rental-${r.rentalId}` });
+  }
+}
+setInterval(() => checkRentalReminders().catch((e) => console.warn("rappel de location :", e.message)), 5 * 60 * 1000);
+
 // surveillance de la voiture : fin de charge, charge interrompue, batterie basse, connexion perdue
 startVehicleMonitor({
   notifier,
@@ -436,6 +470,18 @@ async function onGetaroundEvent(event) {
   const summary = { type: event.type, rentalId: event.rentalId || null, at: at.toISOString() };
   if (event.type === "unrecognized") {
     updateMailState({ lastUnrecognized: { subject: event.subject, at: at.toISOString() } });
+    return;
+  }
+  schedule.apply(event); // planning des locations (toujours, même pour un ancien e-mail)
+  if (BOOKING_TYPES.includes(event.type)) {
+    // prolongation pendant la location en cours : nouveau retour prévu
+    const r = readState().rental || {};
+    if (event.type === "modified" && r.enabled && r.rentalId === event.rentalId && event.plannedEnd) {
+      const state = readState();
+      state.rental = { ...state.rental, plannedEnd: event.plannedEnd.toISOString(), overdueNotified: false };
+      writeState(state);
+    }
+    if (!event.backfill) updateMailState({ lastEvent: summary });
     return;
   }
   if (Date.now() - at.getTime() > EVENT_MAX_AGE_MS) {

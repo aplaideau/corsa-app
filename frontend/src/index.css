@@ -1149,6 +1149,22 @@
   color: var(--accent-strong);
 }
 
+/* prochaine location : information, pas une action */
+.setup-banner.next-rental span:last-child {
+  margin-left: 0;
+  color: var(--text);
+}
+
+.setup-banner.next-rental.empty {
+  border-color: var(--line, color-mix(in srgb, var(--text) 12%, transparent));
+  background: var(--surface);
+}
+
+.setup-banner.next-rental.empty span:last-child {
+  color: var(--muted, var(--text));
+  font-weight: 500;
+}
+
 .login-screen {
   display: grid;
   min-height: 100svh;

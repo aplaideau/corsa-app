@@ -1,5 +1,6 @@
 // Lecture des e-mails Getaround (boîte dédiée, transfert automatique depuis la boîte habituelle)
-// pour activer / désactiver le mode location au début et à la fin de chaque location.
+// pour activer / désactiver le mode location au début et à la fin de chaque location,
+// et tenir le planning des prochaines locations (réservation confirmée, annulée, modifiée).
 //
 // Seuls le type d'événement, le numéro de location et les heures sont conservés :
 // le nom du locataire n'est jamais enregistré. Les e-mails sont seulement marqués comme lus.
@@ -49,8 +50,8 @@ function parseShortDates(text, reference) {
 }
 
 /**
- * Reconnaît un e-mail Getaround de début ou de fin de location.
- * @returns {{type: "start"|"end", rentalId: string, at: Date, plannedStart: Date|null, plannedEnd: Date|null} | null}
+ * Reconnaît un e-mail Getaround : début ou fin de location, réservation confirmée, annulée ou modifiée.
+ * @returns {{type: "start"|"end"|"booked"|"cancelled"|"modified", rentalId: string, at: Date, plannedStart: Date|null, plannedEnd: Date|null} | null}
  */
 function parseGetaroundEmail({ subject = "", from = "", text = "", html = "", date = null }) {
   const all = `${subject}\n${text}\n${html}`;
@@ -58,17 +59,33 @@ function parseGetaroundEmail({ subject = "", from = "", text = "", html = "", da
   if (!fromGetaround) return null;
 
   // 1) marqueur technique des liens Getaround (le plus stable), 2) objet de l'e-mail en secours
+  const mailer = (name) => new RegExp(`rental_owner_mailer(?:%2F|\\/)${name}`, "i").test(all);
   let type = null;
-  if (/rental_owner_mailer(?:%2F|\/)rental_starts/i.test(all)) type = "start";
-  else if (/rental_owner_mailer(?:%2F|\/)rental_ends/i.test(all)) type = "end";
+  if (mailer("rental_starts")) type = "start";
+  else if (mailer("rental_ends")) type = "end";
+  else if (mailer("\\w*cancel\\w*")) type = "cancelled";
+  else if (mailer("adjustment_\\w*done")) type = "modified";
+  else if (mailer("(?:driver_books|owner_accepts|\\w*booking_confirm)\\w*")) type = "booked";
   else if (/Location\s+#\d+\s+débutée/i.test(subject)) type = "start";
   else if (/Location\s+#\d+\s+terminée/i.test(subject)) type = "end";
+  else if (/Location\s+#\d+\s+annulée/i.test(subject)) type = "cancelled";
+  else if (/Modification de la location confirmée/i.test(subject)) type = "modified";
+  else if (/location confirmée du/i.test(subject)) type = "booked";
   if (!type) return null;
 
-  const idMatch = /Location\s+#(\d+)/i.exec(subject) || /dashboard\/rentals\/(\d+)/i.exec(all);
+  const idMatch = /Loc(?:ation|\.)?\s*#(\d+)/i.exec(subject) || /dashboard\/rentals\/(\d+)/i.exec(all);
   if (!idMatch) return null;
 
   const plain = text || html.replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ");
+  if (type === "booked" || type === "cancelled" || type === "modified") {
+    // réservation : les deux premières dates courtes sont le début et la fin (après modification : les nouvelles)
+    const planned = parseShortDates(plain, date || new Date());
+    if (type !== "cancelled" && planned.length < 2) return null;
+    return {
+      type, rentalId: idMatch[1], at: date || new Date(),
+      plannedStart: planned[0] || null, plannedEnd: planned[1] || null,
+    };
+  }
   const label = type === "start" ? /Heure de déverrouillage([\s\S]{0,120})/i : /Heure de verrouillage([\s\S]{0,120})/i;
   const labelMatch = label.exec(plain);
   const actual = labelMatch ? parseLongDate(labelMatch[1]) : null;
@@ -97,8 +114,21 @@ function looksLikeRentalStartOrEnd(subject = "") {
  * Relève la boîte toutes les `intervalMs` et appelle `onEvent(event)` pour chaque e-mail reconnu.
  * `onStatus({lastCheck, lastError})` informe l'appli de l'état de la relève.
  */
-function startMailWatcher({ user, password, host = "imap.gmail.com", port = 993, secure = true, intervalMs = 120000, onEvent, onStatus, log = console }) {
+const BOOKING_TYPES = ["booked", "cancelled", "modified"];
+
+function parseSource(mail, internalDate) {
+  return parseGetaroundEmail({
+    subject: mail.subject || "",
+    from: (mail.from && mail.from.text) || "",
+    text: mail.text || "",
+    html: typeof mail.html === "string" ? mail.html : "",
+    date: mail.date || new Date(internalDate),
+  });
+}
+
+function startMailWatcher({ user, password, host = "imap.gmail.com", port = 993, secure = true, intervalMs = 120000, backfillDays = 30, onEvent, onStatus, log = console }) {
   let running = false;
+  let backfilled = false;
 
   async function checkOnce() {
     if (running) return;
@@ -108,6 +138,23 @@ function startMailWatcher({ user, password, host = "imap.gmail.com", port = 993,
       await client.connect();
       const lock = await client.getMailboxLock("INBOX");
       try {
+        if (!backfilled) {
+          // au démarrage : relire les réservations / annulations / modifications récentes, même déjà lues,
+          // pour reconstruire le planning (les débuts et fins de location déjà lus ne sont pas rejoués)
+          const sinceAll = new Date(Date.now() - backfillDays * 24 * 3600 * 1000);
+          const all = (await client.search({ seen: true, since: sinceAll }, { uid: true })) || [];
+          if (all.length) {
+            const msgs = await client.fetchAll(all, { uid: true, source: true, internalDate: true }, { uid: true });
+            msgs.sort((a, b) => new Date(a.internalDate) - new Date(b.internalDate));
+            for (const msg of msgs) {
+              try {
+                const event = parseSource(await simpleParser(msg.source), msg.internalDate);
+                if (event && BOOKING_TYPES.includes(event.type)) await onEvent({ ...event, backfill: true });
+              } catch (e) { log.warn("e-mail Getaround illisible :", e.message); }
+            }
+          }
+          backfilled = true;
+        }
         const since = new Date(Date.now() - 7 * 24 * 3600 * 1000);
         const uids = (await client.search({ seen: false, since }, { uid: true })) || [];
         if (uids.length) {
@@ -116,13 +163,7 @@ function startMailWatcher({ user, password, host = "imap.gmail.com", port = 993,
           for (const msg of messages) {
             try {
               const mail = await simpleParser(msg.source);
-              const event = parseGetaroundEmail({
-                subject: mail.subject || "",
-                from: (mail.from && mail.from.text) || "",
-                text: mail.text || "",
-                html: typeof mail.html === "string" ? mail.html : "",
-                date: mail.date || new Date(msg.internalDate),
-              });
+              const event = parseSource(mail, msg.internalDate);
               if (event) await onEvent(event);
               else if (looksLikeRentalStartOrEnd(mail.subject)) {
                 // ressemble à un début / une fin de location mais illisible : Getaround a peut-être changé ses e-mails
@@ -154,4 +195,4 @@ function startMailWatcher({ user, password, host = "imap.gmail.com", port = 993,
   return { stop: () => clearInterval(timer), checkOnce };
 }
 
-module.exports = { parseGetaroundEmail, startMailWatcher, brusselsDate, looksLikeRentalStartOrEnd };
+module.exports = { parseGetaroundEmail, startMailWatcher, brusselsDate, looksLikeRentalStartOrEnd, BOOKING_TYPES };

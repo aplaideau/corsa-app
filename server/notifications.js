@@ -10,6 +10,7 @@ const TYPES = {
   rental_start: "Début de location",
   rental_end: "Fin de location",
   rental_overdue: "Fin de location non confirmée",
+  rental_reminder: "Rappel de location",
   charge_done: "Charge terminée",
   charge_interrupted: "Charge interrompue",
   battery_low: "Batterie basse",
