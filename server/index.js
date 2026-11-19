@@ -374,6 +374,21 @@ function changelogSince(previous) {
   }
   return items;
 }
+// écran « Nouveautés » : versions ayant des changements visibles (lignes « Changelog: »)
+app.get("/api/releases", (req, res) => {
+  let lines = [];
+  try { lines = fs.readFileSync(path.join(__dirname, "changelog.tsv"), "utf8").split("\n").filter(Boolean); } catch (e) {}
+  const releases = [];
+  for (const line of lines) {
+    const [sha, date, , trailers = ""] = line.split("\t");
+    const items = trailers.split("\x1f").map((t) => t.trim()).filter(Boolean);
+    if (items.length) releases.push({ version: sha.slice(0, 7), date, items, installed: APP_VERSION.startsWith(sha) || sha.startsWith(APP_VERSION) });
+  }
+  // la version installée n'a pas forcément de note : la plus récente avec une note est alors la courante
+  if (releases.length && !releases.some((r) => r.installed)) releases[0].installed = true;
+  res.json({ version: APP_VERSION.slice(0, 7), releases });
+});
+
 setTimeout(async () => {
   if (APP_VERSION === "dev") return;
   const file = path.join(DATA_DIR, "version.json");
@@ -384,7 +399,7 @@ setTimeout(async () => {
   if (!previous) return; // première installation : rien à annoncer
   const items = changelogSince(previous).slice(0, 6);
   const body = items.length ? items.map((i) => `• ${i}`).join("\n") : "• Corrections et améliorations internes";
-  await notifier.notify("update", "Mise à jour installée", body, { tag: "update" });
+  await notifier.notify("update", "Mise à jour installée", body, { tag: "update", url: "/corsa?view=releases" });
 }, 20000);
 
 // fin de location non confirmée : une seule notification par location

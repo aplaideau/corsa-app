@@ -21,6 +21,7 @@ import {
 } from "./services/vehicleApi";
 import { VehicleMap } from "./VehicleMap";
 import { NotificationsScreen } from "./NotificationsScreen";
+import { ReleasesScreen } from "./ReleasesScreen";
 
 type IconName =
   | "arrowLeft"
@@ -699,6 +700,23 @@ function Dashboard({ onLoggedOut }: { onLoggedOut: () => void }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [configurationOpen, setConfigurationOpen] = useState(window.location.pathname === "/setup");
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [releasesOpen, setReleasesOpen] = useState(
+    () => new URLSearchParams(window.location.search).get("view") === "releases",
+  );
+
+  // notification « Mise à jour installée » : ouvre l'écran Nouveautés
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).has("view")) window.history.replaceState(null, "", window.location.pathname);
+    const onMessage = (event: MessageEvent) => {
+      const url = event.data?.type === "open" ? String(event.data.url || "") : "";
+      if (url.includes("view=releases")) {
+        setMenuOpen(false);
+        setReleasesOpen(true);
+      }
+    };
+    navigator.serviceWorker?.addEventListener("message", onMessage);
+    return () => navigator.serviceWorker?.removeEventListener("message", onMessage);
+  }, []);
   const [vin, setVin] = useState("");
   const [getaroundUrl, setGetaroundUrl] = useState(GETAROUND_FALLBACK_URL);
   const [version, setVersion] = useState("");
@@ -1143,6 +1161,14 @@ function Dashboard({ onLoggedOut }: { onLoggedOut: () => void }) {
         />
       )}
 
+      {releasesOpen && (
+        <ReleasesScreen
+          backIcon={<Icon name="arrowLeft" />}
+          closeIcon={<Icon name="close" />}
+          onClose={() => setReleasesOpen(false)}
+        />
+      )}
+
       {configurationOpen && (
         <ConfigurationFlow
           initialStep={initialStepFor(setup)}
@@ -1253,6 +1279,23 @@ function Dashboard({ onLoggedOut }: { onLoggedOut: () => void }) {
           <span>
             <strong>Ouvrir / fermer via Getaround</strong>
             <small>Page Getaround de la voiture (boîtier Connect)</small>
+          </span>
+          <Icon name="chevron" size={19} />
+        </button>
+        <button
+          className="option-row"
+          onClick={() => {
+            setMenuOpen(false);
+            setReleasesOpen(true);
+          }}
+          type="button"
+        >
+          <span className="option-icon">
+            <Icon name="refresh" />
+          </span>
+          <span>
+            <strong>Nouveautés</strong>
+            <small>Historique des versions</small>
           </span>
           <Icon name="chevron" size={19} />
         </button>

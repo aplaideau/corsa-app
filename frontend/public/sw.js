@@ -22,7 +22,13 @@ self.addEventListener("notificationclick", (event) => {
   const url = (event.notification.data && event.notification.data.url) || "/corsa";
   event.waitUntil(
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((windows) => {
-      for (const w of windows) if ("focus" in w) return w.focus();
+      for (const w of windows) {
+        if ("focus" in w) {
+          // appli déjà ouverte : lui demander d'afficher l'écran visé (ex. ?view=releases)
+          w.postMessage({ type: "open", url });
+          return w.focus();
+        }
+      }
       return self.clients.openWindow(url);
     }),
   );
