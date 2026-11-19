@@ -47,6 +47,17 @@ type IconName =
   | "sun"
   | "unlock";
 
+/** Ouvre un lien externe sans la page blanche de window.open(…, "noopener") dans l'appli iPhone. */
+function openExternal(url: string) {
+  const a = document.createElement("a");
+  a.href = url;
+  a.target = "_blank";
+  a.rel = "noopener noreferrer";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+
 const icons: Record<IconName, ReactNode> = {
   arrowLeft: <path d="m15 18-6-6 6-6" />,
   battery: (
@@ -560,7 +571,7 @@ function ConfigurationFlow({
             </ol>
             <button
               className="secondary-action"
-              onClick={() => window.open(authUrl, "_blank", "noopener,noreferrer")}
+              onClick={() => openExternal(authUrl)}
               type="button"
             >
               Ouvrir la page de connexion MyOpel
@@ -703,6 +714,23 @@ function Dashboard({ onLoggedOut }: { onLoggedOut: () => void }) {
   const [releasesOpen, setReleasesOpen] = useState(
     () => new URLSearchParams(window.location.search).get("view") === "releases",
   );
+
+  // retour dans l'appli (après Getaround, Maps…) : l'iPhone a pu geler une animation du menu en cours ;
+  // on la termine instantanément pour qu'aucun calque invisible ne reste devant l'écran
+  useEffect(() => {
+    const finishAnimations = () => {
+      if (document.visibilityState !== "visible") return;
+      const root = document.documentElement;
+      root.classList.add("no-anim");
+      requestAnimationFrame(() => requestAnimationFrame(() => root.classList.remove("no-anim")));
+    };
+    document.addEventListener("visibilitychange", finishAnimations);
+    window.addEventListener("pageshow", finishAnimations);
+    return () => {
+      document.removeEventListener("visibilitychange", finishAnimations);
+      window.removeEventListener("pageshow", finishAnimations);
+    };
+  }, []);
 
   // notification « Mise à jour installée » : ouvre l'écran Nouveautés
   useEffect(() => {
@@ -1132,7 +1160,7 @@ function Dashboard({ onLoggedOut }: { onLoggedOut: () => void }) {
               aria-label="Voir la localisation"
               disabled={!mapsUrl || rentalOn}
               type="button"
-              onClick={() => mapsUrl && window.open(mapsUrl, "_blank", "noopener,noreferrer")}
+              onClick={() => mapsUrl && openExternal(mapsUrl)}
             >
               <Icon name="route" size={22} />
             </button>
@@ -1269,7 +1297,7 @@ function Dashboard({ onLoggedOut }: { onLoggedOut: () => void }) {
           className="option-row"
           onClick={() => {
             setMenuOpen(false);
-            window.open(getaroundUrl, "_blank", "noopener,noreferrer");
+            openExternal(getaroundUrl);
           }}
           type="button"
         >
@@ -1299,7 +1327,14 @@ function Dashboard({ onLoggedOut }: { onLoggedOut: () => void }) {
           </span>
           <Icon name="chevron" size={19} />
         </button>
-        <button className="option-row" onClick={() => window.open("/", "_blank")} type="button">
+        <button
+          className="option-row"
+          onClick={() => {
+            setMenuOpen(false);
+            openExternal("/");
+          }}
+          type="button"
+        >
           <span className="option-icon">
             <Icon name="external" />
           </span>
