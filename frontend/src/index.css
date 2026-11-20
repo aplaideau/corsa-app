@@ -110,6 +110,10 @@
   font-weight: 600;
 }
 
+.sync-state.asleep {
+  color: var(--text);
+}
+
 .sync-state.syncing {
   color: var(--accent-strong);
 }

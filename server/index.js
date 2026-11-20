@@ -467,6 +467,7 @@ startVehicleMonitor({
       plugged: Boolean(c.plugged),
       moving: Boolean(info.kinetic && info.kinetic.moving),
       threshold: cc && cc.percentage_threshold ? Number(cc.percentage_threshold) : 100,
+      updatedAt: e.updated_at || null, // dernières données envoyées par la voiture
     };
   },
 });

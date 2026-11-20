@@ -12,6 +12,7 @@ const TYPES = {
   rental_overdue: "Fin de location non confirmée",
   rental_reminder: "Rappel de location",
   charge_done: "Charge terminée",
+  car_asleep: "Voiture en veille pendant la charge",
   charge_interrupted: "Charge interrompue",
   battery_low: "Batterie basse",
   technical: "Problème technique",
@@ -165,6 +166,24 @@ function startVehicleMonitor({ notifier, getStatus, getMailError, intervalMs = 1
       }
     }
     if (v.chargeStatus) st.chargeStatus = v.chargeStatus;
+
+    // --- voiture en veille pendant une charge : ses données ne bougent plus, la limite ne peut pas agir
+    const updatedMs = v.updatedAt ? new Date(String(v.updatedAt).replace(" ", "T")).getTime() : NaN;
+    const ageMin = Number.isFinite(updatedMs) ? (Date.now() - updatedMs) / 60000 : null;
+    if (ageMin !== null) {
+      const hhmm = new Intl.DateTimeFormat("fr-BE", { timeZone: "Europe/Brussels", hour: "2-digit", minute: "2-digit" }).format(new Date(updatedMs));
+      if (!st.asleepNotified && v.chargeStatus === "InProgress" && ageMin > 30) {
+        st.asleepNotified = true;
+        await notifier.notify("car_asleep", "La voiture dort pendant la charge",
+          `Dernières données à ${hhmm} (${v.level} %) : la limite de ${threshold} % ne peut pas agir. Déverrouille-la pour la réveiller.`,
+          { tag: "asleep" });
+      } else if (st.asleepNotified && ageMin < 15) {
+        st.asleepNotified = false;
+        const active = v.chargeStatus === "InProgress" ? ", limite de charge active" : "";
+        await notifier.notify("car_asleep", "Voiture de nouveau connectée",
+          `Batterie à ${v.level} %${active}.`, { tag: "asleep" });
+      }
+    }
 
     // --- batterie basse (voiture ni en charge ni en route), une fois par épisode et par appareil
     const notified = new Set(st.lowBatteryNotified || []);

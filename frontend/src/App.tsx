@@ -902,6 +902,16 @@ function Dashboard({ onLoggedOut }: { onLoggedOut: () => void }) {
   };
 
   const updatedLabel = vehicle.updatedAt ? formatTime(vehicle.updatedAt) : null;
+  // données de plus de 15 min : la voiture est en veille, ce qui est affiché est sa dernière photo
+  const asleepSince =
+    loaded && vehicle.updatedAt && Date.now() - vehicle.updatedAt.getTime() > 15 * 60000 ? vehicle.updatedAt : null;
+  const asleepLabel = asleepSince
+    ? `En veille depuis ${
+        asleepSince.toDateString() === new Date().toDateString()
+          ? formatTime(asleepSince)
+          : new Intl.DateTimeFormat("fr-BE", { weekday: "short", hour: "2-digit", minute: "2-digit" }).format(asleepSince)
+      }`
+    : null;
   const formatDayTime = (iso: string) =>
     new Intl.DateTimeFormat("fr-BE", { weekday: "short", hour: "2-digit", minute: "2-digit" }).format(new Date(iso));
   const rentalBanner = !rentalOn
@@ -966,8 +976,20 @@ function Dashboard({ onLoggedOut }: { onLoggedOut: () => void }) {
               <strong>{loaded ? `${vehicle.batteryLevel}%` : "—"}</strong>
               <span>·</span>
               <span>{loaded ? `${vehicle.rangeKm} km` : "—"}</span>
-              <span className={`sync-state ${syncing ? "syncing" : ""} ${offline && !syncing ? "error" : ""}`}>
-                {syncing ? "Synchronisation…" : offline === "server" ? "Serveur injoignable" : offline ? "Hors ligne" : "Connectée"}
+              <span
+                className={`sync-state ${syncing ? "syncing" : ""} ${offline && !syncing ? "error" : ""} ${
+                  !syncing && !offline && asleepLabel ? "asleep" : ""
+                }`}
+              >
+                {syncing
+                  ? "Synchronisation…"
+                  : offline === "server"
+                    ? "Serveur injoignable"
+                    : offline
+                      ? "Hors ligne"
+                      : asleepLabel
+                        ? `🌙 ${asleepLabel}`
+                        : "Connectée · à jour"}
               </span>
             </div>
           </div>
