@@ -844,6 +844,32 @@ function Dashboard({ onLoggedOut }: { onLoggedOut: () => void }) {
     return () => window.clearInterval(timer);
   }, [vin, refresh]);
 
+  // « Actualiser » : pendant une charge, psacc sollicite déjà la voiture toutes les 2 minutes
+  // (quota de 6 réveils / 20 min) — on relit seulement ses dernières données.
+  const actualise = async () => {
+    if (!vin) return notify("Véhicule non configuré");
+    if (vehicle.charging) {
+      await refresh(vin);
+      return notify("Données rechargées · la voiture est déjà suivie pendant la charge");
+    }
+    setSyncing(true);
+    try {
+      await sendVehicleCommand(vin, { type: "wakeup" });
+      notify("Demande envoyée à la voiture");
+      window.clearTimeout(followUp.current);
+      followUp.current = window.setTimeout(() => void refresh(vin), 75_000);
+    } catch (e) {
+      if (e instanceof ApiError && /trop de demandes/i.test(e.message)) {
+        setSyncing(false);
+        await refresh(vin);
+        return notify("La voiture a déjà été sollicitée récemment · données rechargées");
+      }
+      handleError(e);
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   const runCommand = async (command: VehicleCommand, successMessage: string, optimistic?: Partial<VehicleSnapshot>) => {
     if (!vin) return notify("Véhicule non configuré");
     setSyncing(true);
@@ -1099,7 +1125,7 @@ function Dashboard({ onLoggedOut }: { onLoggedOut: () => void }) {
             disabled={syncing}
             icon="refresh"
             label="Actualiser"
-            onClick={() => void runCommand({ type: "wakeup" }, "Demande envoyée à la voiture")}
+            onClick={() => void actualise()}
           />
         </section>
 
