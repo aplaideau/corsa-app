@@ -292,6 +292,10 @@
   letter-spacing: 0.08em;
 }
 
+.live-label.asleep {
+  color: var(--muted);
+}
+
 .live-label i {
   width: 6px;
   height: 6px;

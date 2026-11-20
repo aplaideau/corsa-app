@@ -279,9 +279,13 @@ function ChargeInformation({ vehicle }: { vehicle: VehicleSnapshot }) {
           <span className="section-label">SESSION DE RECHARGE</span>
           <strong>{remainingMinutes === 0 ? "Limite atteinte" : "Recharge en cours"}</strong>
         </div>
-        <span className="live-label">
-          <i /> EN DIRECT
-        </span>
+        {vehicle.updatedAt && Date.now() - vehicle.updatedAt.getTime() > 15 * 60000 ? (
+          <span className="live-label asleep">🌙 EN VEILLE · {formatTime(vehicle.updatedAt)}</span>
+        ) : (
+          <span className="live-label">
+            <i /> EN DIRECT
+          </span>
+        )}
       </div>
       <div className="charge-metrics">
         <div>
