@@ -377,6 +377,57 @@ function changelogSince(previous) {
   }
   return items;
 }
+// accueil personnalisable : cartes affichées et leur ordre (les éléments fixes ne sont pas réglables)
+const LAYOUT_CARDS = ["location", "nextRental", "consumption"];
+const layoutFile = path.join(DATA_DIR, "layout.json");
+function readLayout() {
+  let saved = {};
+  try { saved = JSON.parse(fs.readFileSync(layoutFile, "utf8")); } catch (e) {}
+  const cards = (Array.isArray(saved.cards) ? saved.cards : []).filter((c) => c && LAYOUT_CARDS.includes(c.id));
+  for (const id of LAYOUT_CARDS) if (!cards.some((c) => c.id === id)) cards.push({ id, on: true });
+  return { cards: cards.map((c) => ({ id: c.id, on: c.on !== false })), chargeWhenIdle: saved.chargeWhenIdle === true };
+}
+app.get("/api/layout", (req, res) => res.json(readLayout()));
+app.put("/api/layout", express.json({ limit: "4kb" }), (req, res) => {
+  const body = req.body || {};
+  const seen = new Set();
+  const cards = (Array.isArray(body.cards) ? body.cards : [])
+    .filter((c) => c && LAYOUT_CARDS.includes(c.id) && !seen.has(c.id) && seen.add(c.id))
+    .map((c) => ({ id: c.id, on: c.on !== false }));
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+  fs.writeFileSync(layoutFile, JSON.stringify({ cards, chargeWhenIdle: body.chargeWhenIdle === true }));
+  res.json(readLayout());
+});
+
+// historique des recharges (psacc), sans position
+app.get("/api/chargings", async (req, res) => {
+  try {
+    const raw = await psacc("/vehicles/chargings", { timeout: 30000 });
+    const list = (Array.isArray(raw) ? raw : [])
+      .map((c) => ({
+        start: c.start_at ? new Date(c.start_at).toISOString() : null,
+        stop: c.stop_at ? new Date(c.stop_at).toISOString() : null,
+        from: c.start_level ?? null,
+        to: c.end_level ?? null,
+        kwh: c.kw != null ? Math.round(Number(c.kw) * 10) / 10 : null,
+        minutes: c.duration_min != null ? Math.round(Number(c.duration_min)) : null,
+        price: c.price != null && Number(c.price) > 0 ? Math.round(Number(c.price) * 100) / 100 : null,
+        mode: c.charging_mode || null,
+      }))
+      .filter((c) => c.start)
+      .sort((a, b) => new Date(b.start) - new Date(a.start))
+      .slice(0, 50);
+    res.json({ chargings: list });
+  } catch (e) {
+    res.status(502).json({ error: "Historique des recharges indisponible" });
+  }
+});
+
+// locations prévues (planning tenu par les e-mails Getaround)
+app.get("/api/rentals/upcoming", (req, res) => {
+  res.json({ rentals: schedule.upcoming().map((r) => ({ rentalId: r.rentalId, start: r.start, end: r.end })) });
+});
+
 // écran « Consommation » : trajets enregistrés par psacc (hors locations), sans positions
 const BATTERY_KWH = Number(process.env.BATTERY_KWH) || 50;
 const monthKey = (d) => new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Brussels", year: "numeric", month: "2-digit" }).format(d);
@@ -385,7 +436,13 @@ const weighted = (list) => {
   const kwh = list.reduce((a, t) => a + t.kwh, 0);
   return { km, kwh, avg: km > 0 ? (100 * kwh) / km : null };
 };
+let consumptionCache = { at: 0, value: null };
 app.get("/api/consumption", async (req, res) => {
+  if (consumptionCache.value && Date.now() - consumptionCache.at < 10 * 60000 && !req.query.fresh) {
+    return res.json(consumptionCache.value);
+  }
+  const send = res.json.bind(res);
+  res.json = (value) => { if (value && !value.error) consumptionCache = { at: Date.now(), value }; return send(value); };
   try {
     const vin = await getVin();
     const raw = await psacc("/vehicles/trips", { timeout: 30000 });

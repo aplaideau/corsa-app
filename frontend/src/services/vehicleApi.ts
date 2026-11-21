@@ -116,6 +116,22 @@ export type Consumption = {
 };
 export const getConsumption = () => request<Consumption>("/api/consumption");
 
+// ---- accueil personnalisable, recharges, locations prévues ----------------------
+export type CardId = "location" | "nextRental" | "consumption";
+export type Layout = { cards: { id: CardId; on: boolean }[]; chargeWhenIdle: boolean };
+export const getLayout = () => request<Layout>("/api/layout");
+export const saveLayout = (layout: Layout) =>
+  request<Layout>("/api/layout", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(layout) });
+
+export type ChargingRecord = {
+  start: string; stop: string | null; from: number | null; to: number | null;
+  kwh: number | null; minutes: number | null; price: number | null; mode: string | null;
+};
+export const getChargings = () => request<{ chargings: ChargingRecord[] }>("/api/chargings");
+
+export type UpcomingRental = { rentalId: string; start: string; end: string };
+export const getUpcomingRentals = () => request<{ rentals: UpcomingRental[] }>("/api/rentals/upcoming");
+
 // ---- nouveautés ------------------------------------------------------------
 export type Release = { version: string; date: string; items: string[]; installed: boolean };
 export const getReleases = () => request<{ version: string; releases: Release[] }>("/api/releases");

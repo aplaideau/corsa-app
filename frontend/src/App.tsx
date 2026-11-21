@@ -17,15 +17,18 @@ import {
   type RentalMode,
   type SetupStatus,
   type VehicleCommand,
-  type VehicleSnapshot,
-} from "./services/vehicleApi";
+  type VehicleSnapshot, getLayout, getConsumption, getChargings, type Layout, type Consumption, type ChargingRecord } from "./services/vehicleApi";
 import { VehicleMap } from "./VehicleMap";
 import { NotificationsScreen } from "./NotificationsScreen";
 import { ReleasesScreen } from "./ReleasesScreen";
 import { ConsumptionScreen } from "./ConsumptionScreen";
+import { ChargesScreen, LayoutScreen, LocationScreen, RentalsScreen } from "./DetailScreens";
 
 type IconName =
   | "arrowLeft"
+  | "arrowUp"
+  | "arrowDown"
+  | "sliders"
   | "battery"
   | "bolt"
   | "calendar"
@@ -61,6 +64,9 @@ function openExternal(url: string) {
 
 const icons: Record<IconName, ReactNode> = {
   arrowLeft: <path d="m15 18-6-6 6-6" />,
+  arrowUp: <path d="m6 15 6-6 6 6" />,
+  arrowDown: <path d="m6 9 6 6 6-6" />,
+  sliders: <path d="M4 7h10M18 7h2M4 17h4M12 17h8M16 5v4M10 15v4" />,
   battery: (
     <>
       <rect x="3" y="7" width="16" height="10" rx="2" />
@@ -717,6 +723,33 @@ function Dashboard({ onLoggedOut }: { onLoggedOut: () => void }) {
   const [configurationOpen, setConfigurationOpen] = useState(window.location.pathname === "/setup");
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [consumptionOpen, setConsumptionOpen] = useState(false);
+  const [chargesOpen, setChargesOpen] = useState(false);
+  const [rentalsOpen, setRentalsOpen] = useState(false);
+  const [locationOpen, setLocationOpen] = useState(false);
+  const [layoutOpen, setLayoutOpen] = useState(false);
+  const [layout, setLayout] = useState<Layout>({
+    cards: [
+      { id: "location", on: true },
+      { id: "nextRental", on: true },
+      { id: "consumption", on: true },
+    ],
+    chargeWhenIdle: false,
+  });
+  const [consumption, setConsumption] = useState<Consumption | null>(null);
+  const [lastCharge, setLastCharge] = useState<ChargingRecord | null>(null);
+
+  // accueil personnalisable : réglage gardé sur le serveur
+  useEffect(() => {
+    getLayout().then(setLayout).catch(() => undefined);
+  }, []);
+  const cardOn = (id: string) => layout.cards.some((c) => c.id === id && c.on);
+  useEffect(() => {
+    if (cardOn("consumption")) getConsumption().then(setConsumption).catch(() => undefined);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [layout]);
+  useEffect(() => {
+    if (layout.chargeWhenIdle) getChargings().then((r) => setLastCharge(r.chargings[0] ?? null)).catch(() => undefined);
+  }, [layout.chargeWhenIdle]);
   const [releasesOpen, setReleasesOpen] = useState(
     () => new URLSearchParams(window.location.search).get("view") === "releases",
   );
@@ -996,6 +1029,58 @@ function Dashboard({ onLoggedOut }: { onLoggedOut: () => void }) {
       ? `https://www.google.com/maps/search/?api=1&query=${vehicle.latitude},${vehicle.longitude}`
       : null;
 
+  const LOCATION_CARD = (
+        <button aria-label="Position : voir le détail" className="location-card card card-link" key="location" onClick={() => setLocationOpen(true)} type="button">
+          <div className="map" aria-label="Carte de localisation du véhicule">
+            <svg viewBox="0 0 500 220" preserveAspectRatio="none" aria-hidden="true">
+              <path className="map-road major" d="M-30 184C80 125 146 157 232 88S399 36 535 82" />
+              <path
+                className="map-road"
+                d="M78-15c22 58 30 112 10 250M286-20c-8 80 25 153 85 258M-20 56c92 22 170 14 253-12M249 182c70-15 129-4 270-51"
+              />
+              <path
+                className="map-road minor"
+                d="M140-5c44 70 24 135-18 228M365-10c-24 62-6 116 63 231M-10 116c80-20 132 10 202 62M313 32c42 35 113 35 205 10"
+              />
+            </svg>
+            {showRealMap && (
+              <VehicleMap dark={dark} latitude={vehicle.latitude!} longitude={vehicle.longitude!} />
+            )}
+            {!rentalOn && (
+              <div className={`map-marker ${showRealMap ? "real" : ""}`}>
+                <span>
+                  <Icon name="car" size={20} />
+                </span>
+              </div>
+            )}
+            <div className="map-overlay" />
+          </div>
+          <div className="location-details">
+            <span className="location-icon">
+              <Icon name="mapPin" size={22} />
+            </span>
+            <div>
+              <span className="section-label">LOCALISATION</span>
+              <h2>
+                {rentalOn
+                  ? "Position masquée"
+                  : `${vehicle.city}${vehicle.country ? `, ${vehicle.country}` : ""}`}
+              </h2>
+              <p>
+                {rentalOn
+                  ? "Mode location : la position n’est ni affichée ni enregistrée"
+                  : [vehicle.address, updatedLabel ? `mise à jour à ${updatedLabel}` : null]
+                      .filter(Boolean)
+                      .join(" · ") || "Position inconnue"}
+              </p>
+            </div>
+            <span className="location-icon card-chevron" aria-hidden="true">
+              <Icon name="chevron" size={20} />
+            </span>
+          </div>
+        </button>
+  );
+
   return (
     <div className={dark ? "app dark" : "app light"}>
       <main className="phone-shell">
@@ -1045,13 +1130,6 @@ function Dashboard({ onLoggedOut }: { onLoggedOut: () => void }) {
             </span>
             <span>Gérer</span>
           </button>
-        )}
-
-        {!rentalOn && rental?.mail?.configured && (
-          <div className={`setup-banner next-rental ${next ? "" : "empty"}`}>
-            <Icon name="calendar" size={18} />
-            <span>{nextRentalText}</span>
-          </div>
         )}
 
         {rental?.mail?.lastUnrecognized && (
@@ -1132,8 +1210,6 @@ function Dashboard({ onLoggedOut }: { onLoggedOut: () => void }) {
           />
         </section>
 
-        {vehicle.charging && <ChargeInformation vehicle={{ ...vehicle, chargeLimit }} />}
-
         <section className="charge-card card">
           <div className="card-heading">
             <div>
@@ -1167,60 +1243,62 @@ function Dashboard({ onLoggedOut }: { onLoggedOut: () => void }) {
           </div>
         </section>
 
-        <section className="location-card card">
-          <div className="map" aria-label="Carte de localisation du véhicule">
-            <svg viewBox="0 0 500 220" preserveAspectRatio="none" aria-hidden="true">
-              <path className="map-road major" d="M-30 184C80 125 146 157 232 88S399 36 535 82" />
-              <path
-                className="map-road"
-                d="M78-15c22 58 30 112 10 250M286-20c-8 80 25 153 85 258M-20 56c92 22 170 14 253-12M249 182c70-15 129-4 270-51"
-              />
-              <path
-                className="map-road minor"
-                d="M140-5c44 70 24 135-18 228M365-10c-24 62-6 116 63 231M-10 116c80-20 132 10 202 62M313 32c42 35 113 35 205 10"
-              />
-            </svg>
-            {showRealMap && (
-              <VehicleMap dark={dark} latitude={vehicle.latitude!} longitude={vehicle.longitude!} />
-            )}
-            {!rentalOn && (
-              <div className={`map-marker ${showRealMap ? "real" : ""}`}>
-                <span>
-                  <Icon name="car" size={20} />
-                </span>
-              </div>
-            )}
-            <div className="map-overlay" />
-          </div>
-          <div className="location-details">
-            <span className="location-icon">
-              <Icon name="mapPin" size={22} />
-            </span>
-            <div>
-              <span className="section-label">LOCALISATION</span>
-              <h2>
-                {rentalOn
-                  ? "Position masquée"
-                  : `${vehicle.city}${vehicle.country ? `, ${vehicle.country}` : ""}`}
-              </h2>
-              <p>
-                {rentalOn
-                  ? "Mode location : la position n’est ni affichée ni enregistrée"
-                  : [vehicle.address, updatedLabel ? `mise à jour à ${updatedLabel}` : null]
-                      .filter(Boolean)
-                      .join(" · ") || "Position inconnue"}
-              </p>
-            </div>
-            <button
-              aria-label="Voir la localisation"
-              disabled={!mapsUrl || rentalOn}
-              type="button"
-              onClick={() => mapsUrl && openExternal(mapsUrl)}
-            >
-              <Icon name="route" size={22} />
+        {vehicle.charging ? (
+          <button aria-label="Recharge : voir l’historique" className="card-link charge-link" onClick={() => setChargesOpen(true)} type="button">
+            <ChargeInformation vehicle={{ ...vehicle, chargeLimit }} />
+          </button>
+        ) : (
+          layout.chargeWhenIdle && (
+            <button aria-label="Recharges : voir l’historique" className="card card-link mini-card" onClick={() => setChargesOpen(true)} type="button">
+              <span className="mini-card-icon"><Icon name="bolt" size={20} /></span>
+              <span className="mini-card-body">
+                <span className="section-label">DERNIÈRE RECHARGE</span>
+                <strong>
+                  {lastCharge
+                    ? `${new Intl.DateTimeFormat("fr-BE", { weekday: "short", day: "numeric", month: "short" }).format(new Date(lastCharge.start))}${lastCharge.kwh != null ? ` · ${lastCharge.kwh.toLocaleString("fr-BE")} kWh` : ""}`
+                    : "Aucune recharge enregistrée"}
+                </strong>
+                {lastCharge && lastCharge.from != null && lastCharge.to != null && (
+                  <small>{lastCharge.from} % → {lastCharge.to} %</small>
+                )}
+              </span>
+              <Icon name="chevron" size={19} />
             </button>
-          </div>
-        </section>
+          )
+        )}
+
+
+        {layout.cards
+          .filter((c) => c.on)
+          .map((c) => {
+            if (c.id === "location") return LOCATION_CARD;
+            if (c.id === "nextRental")
+              return (
+                <button aria-label="Locations prévues : voir la liste" className="card card-link mini-card" key="nextRental" onClick={() => setRentalsOpen(true)} type="button">
+                  <span className="mini-card-icon"><Icon name="calendar" size={20} /></span>
+                  <span className="mini-card-body">
+                    <span className="section-label">PROCHAINE LOCATION</span>
+                    <strong>{rental?.mail?.configured ? nextRentalText.replace(/^Prochaine location : /, "") : "Relève des e-mails non configurée"}</strong>
+                  </span>
+                  <Icon name="chevron" size={19} />
+                </button>
+              );
+            return (
+              <button aria-label="Consommation : voir le détail" className="card card-link mini-card" key="consumption" onClick={() => setConsumptionOpen(true)} type="button">
+                <span className="mini-card-icon"><Icon name="route" size={20} /></span>
+                <span className="mini-card-body">
+                  <span className="section-label">CONSOMMATION · 30 JOURS</span>
+                  <strong>
+                    {consumption?.last30.avg != null
+                      ? `${consumption.last30.avg.toLocaleString("fr-BE", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} kWh/100 km`
+                      : "Pas encore assez de trajets"}
+                  </strong>
+                  {consumption?.rangeKm != null && <small>Autonomie réelle ≈ {consumption.rangeKm} km</small>}
+                </span>
+                <Icon name="chevron" size={19} />
+              </button>
+            );
+          })}
 
         <div className="demo-note">
           <span>
@@ -1241,6 +1319,57 @@ function Dashboard({ onLoggedOut }: { onLoggedOut: () => void }) {
           backIcon={<Icon name="arrowLeft" />}
           closeIcon={<Icon name="close" />}
           onClose={() => setNotificationsOpen(false)}
+        />
+      )}
+
+      {chargesOpen && (
+        <ChargesScreen backIcon={<Icon name="arrowLeft" />} closeIcon={<Icon name="close" />} onClose={() => setChargesOpen(false)} />
+      )}
+
+      {rentalsOpen && (
+        <RentalsScreen
+          backIcon={<Icon name="arrowLeft" />}
+          closeIcon={<Icon name="close" />}
+          getaroundUrl={getaroundUrl}
+          onClose={() => setRentalsOpen(false)}
+          openExternal={openExternal}
+        />
+      )}
+
+      {locationOpen && (
+        <LocationScreen
+          backIcon={<Icon name="arrowLeft" />}
+          closeIcon={<Icon name="close" />}
+          detail={[vehicle.address, updatedLabel ? `mise à jour à ${updatedLabel}` : null].filter(Boolean).join(" · ") || "Position inconnue"}
+          hidden={rentalOn}
+          map={
+            showRealMap ? (
+              <>
+                <VehicleMap dark={dark} latitude={vehicle.latitude!} longitude={vehicle.longitude!} />
+                <div className="map-marker real">
+                  <span>
+                    <Icon name="car" size={20} />
+                  </span>
+                </div>
+              </>
+            ) : null
+          }
+          mapsUrl={mapsUrl || null}
+          onClose={() => setLocationOpen(false)}
+          openExternal={openExternal}
+          place={`${vehicle.city}${vehicle.country ? `, ${vehicle.country}` : ""}`}
+        />
+      )}
+
+      {layoutOpen && (
+        <LayoutScreen
+          arrowDown={<Icon name="arrowDown" size={18} />}
+          arrowUp={<Icon name="arrowUp" size={18} />}
+          backIcon={<Icon name="arrowLeft" />}
+          closeIcon={<Icon name="close" />}
+          layout={layout}
+          onChange={setLayout}
+          onClose={() => setLayoutOpen(false)}
         />
       )}
 
@@ -1370,6 +1499,23 @@ function Dashboard({ onLoggedOut }: { onLoggedOut: () => void }) {
           <span>
             <strong>Ouvrir / fermer via Getaround</strong>
             <small>Page Getaround de la voiture (boîtier Connect)</small>
+          </span>
+          <Icon name="chevron" size={19} />
+        </button>
+        <button
+          className="option-row"
+          onClick={() => {
+            setMenuOpen(false);
+            setLayoutOpen(true);
+          }}
+          type="button"
+        >
+          <span className="option-icon">
+            <Icon name="sliders" />
+          </span>
+          <span>
+            <strong>Personnaliser l’accueil</strong>
+            <small>Cartes affichées et leur ordre</small>
           </span>
           <Icon name="chevron" size={19} />
         </button>
