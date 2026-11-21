@@ -92,6 +92,7 @@ export type RentalMode = {
   overdue: boolean;
   recording: "on" | "off" | "unknown";
   nextRental: { rentalId: string; start: string; end: string } | null;
+  renterAbrp?: { linked: boolean; lastSentAt: number | null } | null;
   mail: {
     configured: boolean;
     lastCheck: string | null;

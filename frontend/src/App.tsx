@@ -1038,6 +1038,7 @@ function Dashboard({ onLoggedOut }: { onLoggedOut: () => void }) {
             <Icon name="lock" size={18} />
             <span>
               {rentalBanner}
+              {rental?.renterAbrp?.linked ? " · ABRP du locataire relié" : ""}
               {rental?.recording === "on" ? " (application en cours…)" : ""}
             </span>
             <span>Gérer</span>

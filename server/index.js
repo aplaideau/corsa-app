@@ -8,6 +8,7 @@ const bcrypt = require("bcryptjs");
 const { createProxyMiddleware } = require("http-proxy-middleware");
 const { startMailWatcher, BOOKING_TYPES, brusselsDate } = require("./getaround-mail");
 const { createSchedule } = require("./schedule");
+const { startAbrpShare } = require("./abrp-share");
 const { createNotifier, startVehicleMonitor } = require("./notifications");
 
 const {
@@ -262,6 +263,7 @@ function writeState(state) {
   fs.renameSync(STATE_FILE + ".tmp", STATE_FILE);
 }
 const schedule = createSchedule({ dataDir: DATA_DIR });
+let abrpShare = null; // partage du niveau vers l'ABRP du locataire
 const rentalActive = () => Boolean(readState().rental && readState().rental.enabled);
 
 const OVERDUE_MS = 2 * 3600 * 1000;   // fin non confirmée 2 h après le retour prévu
@@ -284,6 +286,7 @@ function rentalStatus() {
     overdue: Boolean(r.enabled && plannedEnd && Date.now() > plannedEnd.getTime() + OVERDUE_MS),
     recording,
     nextRental: schedule.next(),
+    renterAbrp: abrpShare ? abrpShare.status() : null,
     mail: {
       configured: Boolean(MAIL_USER && MAIL_APP_PASSWORD),
       lastCheck: mail.lastCheck || null,
@@ -602,3 +605,15 @@ app.use("/", createProxyMiddleware({
 }));
 
 app.listen(Number(PORT), () => console.log(`corsa-app en écoute sur :${PORT} → psacc ${PSACC_URL}`));
+
+// page publique « batterie en direct dans ABRP » pour le locataire (QR code), sur un port à part
+abrpShare = startAbrpShare({
+  port: process.env.PUBLIC_PORT || 8081,
+  shareToken: process.env.PUBLIC_SHARE_TOKEN || "",
+  publicBaseUrl: process.env.PUBLIC_BASE_URL || "",
+  apiKey: process.env.ABRP_API_KEY || "",
+  clientId: process.env.ABRP_CLIENT_ID || "",
+  dataDir: DATA_DIR,
+  getStatus: readVehicleStatus,
+  getRental: () => readState().rental || null,
+});

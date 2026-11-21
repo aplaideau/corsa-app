@@ -165,3 +165,21 @@ si `otp` est faux → bandeau « terminer la configuration » (les commandes à 
 - Le port 8080 ne doit **pas** être ouvert dans les règles réseau Oracle : l'accès passe uniquement par Tailscale.
 - `.env` contient les secrets : il n'est jamais versionné.
 - 5 mauvais mots de passe d'affilée bloquent la connexion 15 minutes.
+
+## Batterie en direct dans l'ABRP du locataire
+
+Le locataire scanne le QR code de la carte dans la voiture, puis relie **son** compte ABRP
+(connexion ABRP, ou jeton « Generic » collé à la main). Pendant sa location, l'appli envoie à
+son ABRP **uniquement** le niveau de batterie, l'autonomie et l'état de charge (jamais la
+position). Le lien est effacé automatiquement à la fin de la location.
+
+La page tourne sur un port à part (8081, lié à 127.0.0.1) : seul ce port est publié sur
+Internet, le reste de l'appli reste privé derrière Tailscale.
+
+1. Clé API Telemetry gratuite : https://abetterrouteplanner.com/home/app/api-keys/telemetry
+   (si possible, y inscrire aussi l'application OAuth avec l'adresse de retour
+   `https://<machine>.<tailnet>.ts.net:8443/abrp/callback`).
+2. Dans `.env` : `PUBLIC_SHARE_TOKEN`, `PUBLIC_BASE_URL`, `ABRP_API_KEY` (et `ABRP_CLIENT_ID`
+   si l'OAuth est accordé), puis `sudo docker compose up -d`.
+3. Publier ce seul port : `sudo tailscale funnel --bg --https=8443 http://127.0.0.1:8081`.
+4. Adresse du QR code : `https://<machine>.<tailnet>.ts.net:8443/a/<PUBLIC_SHARE_TOKEN>`.
