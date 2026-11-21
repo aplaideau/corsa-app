@@ -8,6 +8,7 @@ const bcrypt = require("bcryptjs");
 const { createProxyMiddleware } = require("http-proxy-middleware");
 const { startMailWatcher, BOOKING_TYPES, brusselsDate } = require("./getaround-mail");
 const { createSchedule } = require("./schedule");
+const { startPublicShare } = require("./public-share");
 const { createNotifier, startVehicleMonitor } = require("./notifications");
 
 const {
@@ -445,6 +446,25 @@ async function checkRentalReminders() {
 setInterval(() => checkRentalReminders().catch((e) => console.warn("rappel de location :", e.message)), 5 * 60 * 1000);
 
 // surveillance de la voiture : fin de charge, charge interrompue, batterie basse, connexion perdue
+// état de la voiture utilisé par la surveillance et la page publique
+async function readVehicleStatus() {
+  const vin = await getVin();
+  if (!vin) throw new Error("VIN inconnu");
+  const info = await psacc(`/get_vehicleinfo/${encodeURIComponent(vin)}?from_cache=1`);
+  const cc = await psacc(`/charge_control?vin=${encodeURIComponent(vin)}`).catch(() => null);
+  const e = (info.energy || []).find((x) => x.type === "Electric") || (info.energy || [])[0] || {};
+  const c = e.charging || {};
+  return {
+    level: Math.round(Number(e.level) || 0),
+    autonomy: e.autonomy ? Math.round(Number(e.autonomy)) : null,
+    chargeStatus: String(c.status || "").split(".").pop() || null,
+    plugged: Boolean(c.plugged),
+    moving: Boolean(info.kinetic && info.kinetic.moving),
+    threshold: cc && cc.percentage_threshold ? Number(cc.percentage_threshold) : 100,
+    updatedAt: e.updated_at || null, // dernières données envoyées par la voiture
+  };
+}
+
 startVehicleMonitor({
   notifier,
   intervalMs: Math.max(10, Number(MONITOR_SECONDS) || 120) * 1000,
@@ -453,23 +473,7 @@ startVehicleMonitor({
     const m = readState().mail || {};
     return m.lastError ? { since: m.lastErrorSince || m.lastCheck } : null;
   },
-  getStatus: async () => {
-    const vin = await getVin();
-    if (!vin) throw new Error("VIN inconnu");
-    const info = await psacc(`/get_vehicleinfo/${encodeURIComponent(vin)}?from_cache=1`);
-    const cc = await psacc(`/charge_control?vin=${encodeURIComponent(vin)}`).catch(() => null);
-    const e = (info.energy || []).find((x) => x.type === "Electric") || (info.energy || [])[0] || {};
-    const c = e.charging || {};
-    return {
-      level: Math.round(Number(e.level) || 0),
-      autonomy: e.autonomy ? Math.round(Number(e.autonomy)) : null,
-      chargeStatus: String(c.status || "").split(".").pop() || null,
-      plugged: Boolean(c.plugged),
-      moving: Boolean(info.kinetic && info.kinetic.moving),
-      threshold: cc && cc.percentage_threshold ? Number(cc.percentage_threshold) : 100,
-      updatedAt: e.updated_at || null, // dernières données envoyées par la voiture
-    };
-  },
+  getStatus: readVehicleStatus,
 });
 
 // ---- e-mails Getaround → mode location automatique ----------------------------
@@ -602,3 +606,11 @@ app.use("/", createProxyMiddleware({
 }));
 
 app.listen(Number(PORT), () => console.log(`corsa-app en écoute sur :${PORT} → psacc ${PSACC_URL}`));
+
+// page publique « niveau de batterie » (QR code dans la voiture), sur un port à part
+startPublicShare({
+  port: process.env.PUBLIC_PORT || 8081,
+  token: process.env.PUBLIC_SHARE_TOKEN || "",
+  getStatus: readVehicleStatus,
+  rentalActive,
+});
