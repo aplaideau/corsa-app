@@ -448,6 +448,25 @@ async function checkRentalReminders() {
 setInterval(() => checkRentalReminders().catch((e) => console.warn("rappel de location :", e.message)), 5 * 60 * 1000);
 
 // surveillance de la voiture : fin de charge, charge interrompue, batterie basse, connexion perdue
+// état de la voiture utilisé par la surveillance et le partage ABRP du locataire
+async function readVehicleStatus() {
+  const vin = await getVin();
+  if (!vin) throw new Error("VIN inconnu");
+  const info = await psacc(`/get_vehicleinfo/${encodeURIComponent(vin)}?from_cache=1`);
+  const cc = await psacc(`/charge_control?vin=${encodeURIComponent(vin)}`).catch(() => null);
+  const e = (info.energy || []).find((x) => x.type === "Electric") || (info.energy || [])[0] || {};
+  const c = e.charging || {};
+  return {
+    level: Math.round(Number(e.level) || 0),
+    autonomy: e.autonomy ? Math.round(Number(e.autonomy)) : null,
+    chargeStatus: String(c.status || "").split(".").pop() || null,
+    plugged: Boolean(c.plugged),
+    moving: Boolean(info.kinetic && info.kinetic.moving),
+    threshold: cc && cc.percentage_threshold ? Number(cc.percentage_threshold) : 100,
+    updatedAt: e.updated_at || null, // dernières données envoyées par la voiture
+  };
+}
+
 startVehicleMonitor({
   notifier,
   intervalMs: Math.max(10, Number(MONITOR_SECONDS) || 120) * 1000,
@@ -456,23 +475,7 @@ startVehicleMonitor({
     const m = readState().mail || {};
     return m.lastError ? { since: m.lastErrorSince || m.lastCheck } : null;
   },
-  getStatus: async () => {
-    const vin = await getVin();
-    if (!vin) throw new Error("VIN inconnu");
-    const info = await psacc(`/get_vehicleinfo/${encodeURIComponent(vin)}?from_cache=1`);
-    const cc = await psacc(`/charge_control?vin=${encodeURIComponent(vin)}`).catch(() => null);
-    const e = (info.energy || []).find((x) => x.type === "Electric") || (info.energy || [])[0] || {};
-    const c = e.charging || {};
-    return {
-      level: Math.round(Number(e.level) || 0),
-      autonomy: e.autonomy ? Math.round(Number(e.autonomy)) : null,
-      chargeStatus: String(c.status || "").split(".").pop() || null,
-      plugged: Boolean(c.plugged),
-      moving: Boolean(info.kinetic && info.kinetic.moving),
-      threshold: cc && cc.percentage_threshold ? Number(cc.percentage_threshold) : 100,
-      updatedAt: e.updated_at || null, // dernières données envoyées par la voiture
-    };
-  },
+  getStatus: readVehicleStatus,
 });
 
 // ---- e-mails Getaround → mode location automatique ----------------------------
