@@ -104,6 +104,18 @@ export const getRentalMode = () => request<RentalMode>("/api/rental-mode");
 export const setRentalMode = (enabled: boolean) => postJson<RentalMode>("/api/rental-mode", { enabled });
 export const dismissUnrecognizedMail = () => postJson<RentalMode>("/api/mail/dismiss-unrecognized");
 
+// ---- consommation ------------------------------------------------------------
+export type Consumption = {
+  last30: { avg: number | null; km: number; trips: number };
+  rangeKm: number | null;
+  soh: number | null;
+  batteryKwh: number;
+  monthly: { month: string; km: number; avg: number | null; trips: number }[];
+  recent: { at: string; km: number; minutes: number; avg: number | null }[];
+  since: string | null;
+};
+export const getConsumption = () => request<Consumption>("/api/consumption");
+
 // ---- nouveautés ------------------------------------------------------------
 export type Release = { version: string; date: string; items: string[]; installed: boolean };
 export const getReleases = () => request<{ version: string; releases: Release[] }>("/api/releases");

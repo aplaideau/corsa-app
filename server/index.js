@@ -377,6 +377,66 @@ function changelogSince(previous) {
   }
   return items;
 }
+// écran « Consommation » : trajets enregistrés par psacc (hors locations), sans positions
+const BATTERY_KWH = Number(process.env.BATTERY_KWH) || 50;
+const monthKey = (d) => new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Brussels", year: "numeric", month: "2-digit" }).format(d);
+const weighted = (list) => {
+  const km = list.reduce((a, t) => a + t.distance, 0);
+  const kwh = list.reduce((a, t) => a + t.kwh, 0);
+  return { km, kwh, avg: km > 0 ? (100 * kwh) / km : null };
+};
+app.get("/api/consumption", async (req, res) => {
+  try {
+    const vin = await getVin();
+    const raw = await psacc("/vehicles/trips", { timeout: 30000 });
+    const trips = (Array.isArray(raw) ? raw : [])
+      .map((t) => ({
+        at: new Date(t.start_at),
+        distance: Number(t.distance) || 0,
+        kwh: Number(t.consumption) || 0,
+        minutes: Number(t.duration) || 0,
+        speed: Number(t.speed_average) || 0,
+      }))
+      .filter((t) => t.distance > 0 && !Number.isNaN(t.at.getTime()))
+      .sort((a, b) => a.at - b.at);
+    const since = Date.now() - 30 * 86400000;
+    const last30 = weighted(trips.filter((t) => t.at.getTime() >= since));
+    const months = new Map();
+    for (const t of trips) {
+      const k = monthKey(t.at);
+      if (!months.has(k)) months.set(k, []);
+      months.get(k).push(t);
+    }
+    const monthly = [...months.entries()].slice(-12).map(([month, list]) => {
+      const w = weighted(list);
+      return { month, km: Math.round(w.km), avg: w.avg !== null ? Math.round(w.avg * 10) / 10 : null, trips: list.length };
+    });
+    let soh = null;
+    if (vin) {
+      const r = await psacc(`/battery/soh/${encodeURIComponent(vin)}`).catch(() => null);
+      soh = r && Number(r.soh) > 0 ? Number(r.soh) : null;
+    }
+    const avg = last30.km >= 20 ? Math.round(last30.avg * 10) / 10 : null; // moins de 20 km : pas assez fiable
+    const usable = BATTERY_KWH * (soh ? soh / 100 : 1);
+    res.json({
+      last30: { avg, km: Math.round(last30.km), trips: trips.filter((t) => t.at.getTime() >= since).length },
+      rangeKm: avg ? Math.round((usable / avg) * 100) : null,
+      soh,
+      batteryKwh: BATTERY_KWH,
+      monthly,
+      recent: trips.slice(-15).reverse().map((t) => ({
+        at: t.at.toISOString(),
+        km: Math.round(t.distance * 10) / 10,
+        minutes: Math.round(t.minutes),
+        avg: t.distance >= 2 ? Math.round((1000 * t.kwh) / t.distance) / 10 : null,
+      })),
+      since: trips.length ? trips[0].at.toISOString() : null,
+    });
+  } catch (e) {
+    res.status(502).json({ error: "Historique des trajets indisponible" });
+  }
+});
+
 // écran « Nouveautés » : versions ayant des changements visibles (lignes « Changelog: »)
 app.get("/api/releases", (req, res) => {
   let lines = [];

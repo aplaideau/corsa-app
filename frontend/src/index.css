@@ -1304,6 +1304,146 @@
   font-size: 10px;
 }
 
+.conso-big {
+  margin: 6px 0 4px;
+  font-size: 40px;
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+}
+
+.conso-big small {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.conso-chart {
+  position: relative;
+  height: 170px;
+  margin: 14px 0 8px;
+  padding-left: 22px;
+}
+
+.conso-grid {
+  position: absolute;
+  left: 22px;
+  right: 0;
+  border-top: 1px dashed var(--line);
+}
+
+.conso-grid span {
+  position: absolute;
+  left: -22px;
+  top: -8px;
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.conso-bars {
+  position: absolute;
+  inset: 0 0 0 22px;
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+}
+
+.conso-bar {
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 44px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+
+.conso-track {
+  position: relative;
+  flex: 1 1 auto;
+  width: 100%;
+}
+
+.conso-bar i {
+  position: absolute;
+  bottom: 0;
+  left: 20%;
+  width: 60%;
+  background: color-mix(in srgb, var(--accent) 45%, transparent);
+  border-radius: 4px 4px 0 0;
+}
+
+.conso-bar.picked i {
+  background: var(--accent);
+}
+
+.conso-bar > span:last-child {
+  height: 18px;
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.conso-bar.picked > span:last-child {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.conso-detail {
+  margin: 0;
+  font-size: 13px;
+}
+
+.conso-trips {
+  margin: 8px 0;
+  padding: 0;
+  list-style: none;
+}
+
+.conso-trips li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 0;
+  border-top: 1px solid var(--line);
+}
+
+.conso-trips li:first-child {
+  border-top: 0;
+}
+
+.conso-trips li > div:first-child {
+  display: flex;
+  flex-direction: column;
+  font-size: 13px;
+}
+
+.conso-trip-value {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  font-size: 14px;
+}
+
+.conso-tag {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.conso-tag.low::before {
+  content: "▼ ";
+}
+
+.conso-tag.high::before {
+  content: "▲ ";
+}
+
 .release {
   padding: 14px 0;
   border-top: 1px solid var(--line);

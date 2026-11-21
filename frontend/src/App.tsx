@@ -22,6 +22,7 @@ import {
 import { VehicleMap } from "./VehicleMap";
 import { NotificationsScreen } from "./NotificationsScreen";
 import { ReleasesScreen } from "./ReleasesScreen";
+import { ConsumptionScreen } from "./ConsumptionScreen";
 
 type IconName =
   | "arrowLeft"
@@ -715,6 +716,7 @@ function Dashboard({ onLoggedOut }: { onLoggedOut: () => void }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [configurationOpen, setConfigurationOpen] = useState(window.location.pathname === "/setup");
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [consumptionOpen, setConsumptionOpen] = useState(false);
   const [releasesOpen, setReleasesOpen] = useState(
     () => new URLSearchParams(window.location.search).get("view") === "releases",
   );
@@ -1242,6 +1244,14 @@ function Dashboard({ onLoggedOut }: { onLoggedOut: () => void }) {
         />
       )}
 
+      {consumptionOpen && (
+        <ConsumptionScreen
+          backIcon={<Icon name="arrowLeft" />}
+          closeIcon={<Icon name="close" />}
+          onClose={() => setConsumptionOpen(false)}
+        />
+      )}
+
       {releasesOpen && (
         <ReleasesScreen
           backIcon={<Icon name="arrowLeft" />}
@@ -1360,6 +1370,23 @@ function Dashboard({ onLoggedOut }: { onLoggedOut: () => void }) {
           <span>
             <strong>Ouvrir / fermer via Getaround</strong>
             <small>Page Getaround de la voiture (boîtier Connect)</small>
+          </span>
+          <Icon name="chevron" size={19} />
+        </button>
+        <button
+          className="option-row"
+          onClick={() => {
+            setMenuOpen(false);
+            setConsumptionOpen(true);
+          }}
+          type="button"
+        >
+          <span className="option-icon">
+            <Icon name="bolt" />
+          </span>
+          <span>
+            <strong>Consommation</strong>
+            <small>Moyennes et derniers trajets</small>
           </span>
           <Icon name="chevron" size={19} />
         </button>
