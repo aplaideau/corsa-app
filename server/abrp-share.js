@@ -102,14 +102,25 @@ function startAbrpShare({ port, shareToken, publicBaseUrl, apiKey, clientId, dat
     if (now - h.t > 60000) { h.n = 0; h.t = now; }
     h.n += 1; hits.set(k, h); if (hits.size > 5000) hits.clear();
     if (h.n > 40) return res.status(429).end();
-    res.set({ "Cache-Control": "no-store", "X-Robots-Tag": "noindex, nofollow", "X-Content-Type-Options": "nosniff", "Referrer-Policy": "no-referrer", "X-Frame-Options": "DENY" });
+    res.set({ "Cache-Control": "no-store", "X-Robots-Tag": "noindex, nofollow", "X-Content-Type-Options": "nosniff", "Referrer-Policy": "same-origin", "X-Frame-Options": "DENY" });
     next();
   });
   const gate = (req, res, next) => (same(req.params.t, shareToken) ? next() : res.status(404).end());
-  // formulaires : refuser les envois venant d'un autre site
+  // formulaires : jeton anti-falsification (valable 30 min) + provenance quand le navigateur la donne
+  const csrf = new Map();
+  const newCsrf = () => {
+    const v = crypto.randomBytes(18).toString("base64url");
+    csrf.set(v, Date.now());
+    for (const [k, at] of csrf) if (Date.now() - at > 30 * 60000) csrf.delete(k);
+    return v;
+  };
   const sameOrigin = (req, res, next) => {
     const o = req.get("origin");
-    if (o && base && o !== new URL(base).origin) return res.status(403).end();
+    const okOrigin = !o || o === "null" || !base || o === new URL(base).origin;
+    const v = String((req.body && req.body.csrf) || "");
+    const okToken = csrf.has(v) && Date.now() - csrf.get(v) < 30 * 60000;
+    if (!okOrigin || !okToken) return res.redirect(303, `${sharePath}?e=fail`);
+    csrf.delete(v);
     next();
   };
 
@@ -121,11 +132,11 @@ function startAbrpShare({ port, shareToken, publicBaseUrl, apiKey, clientId, dat
     if (!rid) body = `<p class="muted">${t.off}</p>`;
     else if (linked) {
       body = `<div class="ok">✓ ${t.linked}</div><p>${link.lastLevel != null ? t.level(link.lastLevel) : t.waiting}</p><p class="muted">${t.end}</p>
-<form method="post" action="${sharePath}/unlink"><button class="ghost" type="submit">${t.unlink}</button></form>`;
+<form method="post" action="${sharePath}/unlink"><input type="hidden" name="csrf" value="${newCsrf()}"><button class="ghost" type="submit">${t.unlink}</button></form>`;
     } else {
       body = `<p>${t.intro}</p><p class="muted">${t.before}</p>
 ${oauth ? `<a class="btn" href="${sharePath}/connect">${t.connect}</a><p class="or">${t.or}</p>` : ""}
-<form method="post" action="${sharePath}/token"><label for="tok">${t.manual}</label><input id="tok" name="token" autocomplete="off" autocapitalize="off" spellcheck="false" required minlength="8" maxlength="200"><p class="muted small">${t.manualHelp}</p><button class="${oauth ? "ghost" : "btn"}" type="submit">${t.send}</button></form>
+<form method="post" action="${sharePath}/token"><input type="hidden" name="csrf" value="${newCsrf()}"><label for="tok">${t.manual}</label><input id="tok" name="token" autocomplete="off" autocapitalize="off" spellcheck="false" required minlength="8" maxlength="200"><p class="muted small">${t.manualHelp}</p><button class="${oauth ? "ghost" : "btn"}" type="submit">${t.send}</button></form>
 <p class="muted small">${t.end}</p>`;
     }
     const err = msg ? `<p class="err">${esc(t[msg] || "")}</p>` : "";
