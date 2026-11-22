@@ -9,25 +9,65 @@ const monthLong = (m: string) =>
 const dayLabel = (iso: string) =>
   new Intl.DateTimeFormat("fr-BE", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }).format(new Date(iso));
 
+/** Graphique de la consommation moyenne par mois (une barre par mois, touche = détail). */
+export function MonthlyChart({ monthly }: { monthly: Consumption["monthly"] }) {
+  const months = monthly.filter((m) => m.avg !== null);
+  const [picked, setPicked] = useState<string | null>(null);
+  if (months.length === 0) return null;
+  const max = Math.max(20, ...months.map((m) => m.avg as number));
+  const top = Math.ceil(max / 5) * 5;
+  const pickedMonth = months.find((m) => m.month === picked) ?? months[months.length - 1];
+  return (
+    <>
+                <div className="conso-chart" role="img" aria-label={months.map((m) => `${monthLong(m.month)} : ${fmt1(m.avg as number)} kWh/100 km`).join(", ")}>
+                  <div className="conso-grid" style={{ bottom: `calc(22px + (100% - 22px) * ${10 / top})` }}>
+                    <span>10</span>
+                  </div>
+                  <div className="conso-grid" style={{ bottom: `calc(22px + (100% - 22px) * ${20 / top})` }}>
+                    <span>20</span>
+                  </div>
+                  <div className="conso-bars">
+                    {months.map((m) => (
+                      <button
+                        aria-label={`${monthLong(m.month)} : ${fmt1(m.avg as number)} kWh/100 km, ${m.km} km`}
+                        aria-pressed={m.month === pickedMonth?.month}
+                        className={`conso-bar ${m.month === pickedMonth?.month ? "picked" : ""}`}
+                        key={m.month}
+                        onClick={() => setPicked(m.month)}
+                        type="button"
+                      >
+                        <span className="conso-track">
+                          <i style={{ height: `${((m.avg as number) / top) * 100}%` }} />
+                        </span>
+                        <span>{monthLabel(m.month)}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                {pickedMonth && (
+                  <p className="conso-detail">
+                    <strong>{monthLong(pickedMonth.month)}</strong> · {fmt1(pickedMonth.avg as number)} kWh/100 km ·{" "}
+                    {pickedMonth.km} km · {pickedMonth.trips} trajet{pickedMonth.trips > 1 ? "s" : ""}
+                  </p>
+                )}
+    </>
+  );
+}
+
 /** Écran « Consommation » : moyenne 30 jours, autonomie réelle, moyenne par mois, derniers trajets. */
 export function ConsumptionScreen({ backIcon, closeIcon, onClose }: { backIcon: ReactNode; closeIcon: ReactNode; onClose: () => void }) {
   const [data, setData] = useState<Consumption | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [picked, setPicked] = useState<string | null>(null);
 
   useEffect(() => {
     getConsumption()
       .then((d) => {
         setData(d);
-        setPicked(d.monthly.length ? d.monthly[d.monthly.length - 1].month : null);
       })
       .catch((e) => setError(e instanceof ApiError && e.status === 0 ? "Serveur injoignable" : "Historique des trajets indisponible"));
   }, []);
 
   const months = data?.monthly.filter((m) => m.avg !== null) ?? [];
-  const max = Math.max(20, ...months.map((m) => m.avg as number));
-  const top = Math.ceil(max / 5) * 5;
-  const pickedMonth = months.find((m) => m.month === picked) ?? months[months.length - 1];
   const ref = data?.last30.avg ?? null;
 
   return (
@@ -86,37 +126,7 @@ export function ConsumptionScreen({ backIcon, closeIcon, onClose }: { backIcon: 
               <section className="configuration-card notif-card">
                 <h3>Consommation moyenne par mois</h3>
                 <p className="muted small">kWh/100 km · touchez un mois pour le détail</p>
-                <div className="conso-chart" role="img" aria-label={months.map((m) => `${monthLong(m.month)} : ${fmt1(m.avg as number)} kWh/100 km`).join(", ")}>
-                  <div className="conso-grid" style={{ bottom: `calc(22px + (100% - 22px) * ${10 / top})` }}>
-                    <span>10</span>
-                  </div>
-                  <div className="conso-grid" style={{ bottom: `calc(22px + (100% - 22px) * ${20 / top})` }}>
-                    <span>20</span>
-                  </div>
-                  <div className="conso-bars">
-                    {months.map((m) => (
-                      <button
-                        aria-label={`${monthLong(m.month)} : ${fmt1(m.avg as number)} kWh/100 km, ${m.km} km`}
-                        aria-pressed={m.month === pickedMonth?.month}
-                        className={`conso-bar ${m.month === pickedMonth?.month ? "picked" : ""}`}
-                        key={m.month}
-                        onClick={() => setPicked(m.month)}
-                        type="button"
-                      >
-                        <span className="conso-track">
-                          <i style={{ height: `${((m.avg as number) / top) * 100}%` }} />
-                        </span>
-                        <span>{monthLabel(m.month)}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                {pickedMonth && (
-                  <p className="conso-detail">
-                    <strong>{monthLong(pickedMonth.month)}</strong> · {fmt1(pickedMonth.avg as number)} kWh/100 km ·{" "}
-                    {pickedMonth.km} km · {pickedMonth.trips} trajet{pickedMonth.trips > 1 ? "s" : ""}
-                  </p>
-                )}
+                <MonthlyChart monthly={data.monthly} />
               </section>
             )}
 

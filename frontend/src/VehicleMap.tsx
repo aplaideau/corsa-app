@@ -59,6 +59,7 @@ export function VehicleMap({ latitude, longitude, dark }: { latitude: number; lo
   // création (une seule fois)
   useEffect(() => {
     let cancelled = false;
+    let resizeObs: ResizeObserver | null = null;
     (async () => {
       try {
         const [{ default: maplibregl }] = await Promise.all([
@@ -75,12 +76,18 @@ export function VehicleMap({ latitude, longitude, dark }: { latitude: number; lo
           attributionControl: false,
           fadeDuration: 0,
         });
+        // la carte d'accueil peut s'agrandir (carte dépliée) : suivre la taille du conteneur
+        if (typeof ResizeObserver !== "undefined") {
+          resizeObs = new ResizeObserver(() => map.current?.resize());
+          resizeObs.observe(container.current);
+        }
       } catch {
         if (!cancelled) setFailed(true);
       }
     })();
     return () => {
       cancelled = true;
+      resizeObs?.disconnect();
       map.current?.remove();
       map.current = null;
     };

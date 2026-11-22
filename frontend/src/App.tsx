@@ -17,11 +17,11 @@ import {
   type RentalMode,
   type SetupStatus,
   type VehicleCommand,
-  type VehicleSnapshot, getLayout, getConsumption, getChargings, type Layout, type Consumption, type ChargingRecord } from "./services/vehicleApi";
+  type VehicleSnapshot, getLayout, getConsumption, getChargings, getUpcomingRentals, type UpcomingRental, type CardId, type Layout, type Consumption, type ChargingRecord } from "./services/vehicleApi";
 import { VehicleMap } from "./VehicleMap";
 import { NotificationsScreen } from "./NotificationsScreen";
 import { ReleasesScreen } from "./ReleasesScreen";
-import { ConsumptionScreen } from "./ConsumptionScreen";
+import { ConsumptionScreen, MonthlyChart } from "./ConsumptionScreen";
 import { ChargesScreen, LayoutScreen, LocationScreen, RentalsScreen } from "./DetailScreens";
 
 type IconName =
@@ -736,7 +736,11 @@ function Dashboard({ onLoggedOut }: { onLoggedOut: () => void }) {
     ],
   });
   const [consumption, setConsumption] = useState<Consumption | null>(null);
-  const [lastCharge, setLastCharge] = useState<ChargingRecord | null>(null);
+  const [chargeList, setChargeList] = useState<ChargingRecord[]>([]);
+  const lastCharge = chargeList[0] ?? null;
+  const [upcoming, setUpcoming] = useState<UpcomingRental[] | null>(null);
+  const [expanded, setExpanded] = useState<CardId | null>(null); // une seule carte dépliée, rien de mémorisé
+  const toggleCard = (id: CardId) => setExpanded((cur) => (cur === id ? null : id));
 
   // accueil personnalisable : réglage gardé sur le serveur
   useEffect(() => {
@@ -747,12 +751,15 @@ function Dashboard({ onLoggedOut }: { onLoggedOut: () => void }) {
     if (cardOn("consumption")) getConsumption().then(setConsumption).catch(() => undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [layout]);
+  useEffect(() => {
+    if (expanded === "nextRental") getUpcomingRentals().then((r) => setUpcoming(r.rentals)).catch(() => setUpcoming([]));
+  }, [expanded]);
   const [charges30, setCharges30] = useState<{ count: number; kwh: number } | null>(null);
   useEffect(() => {
     if (!cardOn("charges")) return;
     getChargings()
       .then((r) => {
-        setLastCharge(r.chargings[0] ?? null);
+        setChargeList(r.chargings);
         const recent = r.chargings.filter((c) => Date.now() - new Date(c.start).getTime() < 30 * 86400000);
         setCharges30({ count: recent.length, kwh: recent.reduce((a, c) => a + (c.kwh ?? 0), 0) });
       })
@@ -1039,7 +1046,8 @@ function Dashboard({ onLoggedOut }: { onLoggedOut: () => void }) {
       : null;
 
   const LOCATION_CARD = (
-        <button aria-label="Position : voir le détail" className="location-card card card-link" key="location" onClick={() => setLocationOpen(true)} type="button">
+        <section className={`location-card card ${expanded === "location" ? "expanded" : ""}`} key="location">
+        <button aria-expanded={expanded === "location"} aria-label="Position" className="card-link card-toggle" onClick={() => toggleCard("location")} type="button">
           <div className="map" aria-label="Carte de localisation du véhicule">
             <svg viewBox="0 0 500 220" preserveAspectRatio="none" aria-hidden="true">
               <path className="map-road major" d="M-30 184C80 125 146 157 232 88S399 36 535 82" />
@@ -1088,6 +1096,16 @@ function Dashboard({ onLoggedOut }: { onLoggedOut: () => void }) {
             </span>
           </div>
         </button>
+        {expanded === "location" && !rentalOn && (
+          <div className="card-expand">
+            {mapsUrl && (
+              <button className="ghost-button" onClick={() => openExternal(mapsUrl)} type="button">
+                Ouvrir dans Plans / Google Maps
+              </button>
+            )}
+          </div>
+        )}
+        </section>
   );
 
   return (
@@ -1260,52 +1278,107 @@ function Dashboard({ onLoggedOut }: { onLoggedOut: () => void }) {
           .filter((c) => c.on)
           .map((c) => {
             if (c.id === "location") return LOCATION_CARD;
-            if (c.id === "nextRental")
-              return (
-                <button aria-label="Locations prévues : voir la liste" className="card card-link mini-card" key="nextRental" onClick={() => setRentalsOpen(true)} type="button">
-                  <span className="mini-card-icon"><Icon name="calendar" size={20} /></span>
+            const open = expanded === c.id;
+            const shell = (icon: IconName, label: string, title: ReactNode, sub: ReactNode, body: ReactNode, all: () => void) => (
+              <section className={`card mini-wrap ${open ? "expanded" : ""}`} key={c.id}>
+                <button aria-expanded={open} className="mini-card card-link" onClick={() => toggleCard(c.id)} type="button">
+                  <span className="mini-card-icon"><Icon name={icon} size={20} /></span>
                   <span className="mini-card-body">
-                    <span className="section-label">PROCHAINE LOCATION</span>
-                    <strong>{rental?.mail?.configured ? nextRentalText.replace(/^Prochaine location : /, "") : "Relève des e-mails non configurée"}</strong>
+                    <span className="section-label">{label}</span>
+                    <strong>{title}</strong>
+                    {sub && <small>{sub}</small>}
                   </span>
-                  <Icon name="chevron" size={19} />
+                  <span className="mini-chevron" aria-hidden="true"><Icon name="arrowDown" size={19} /></span>
                 </button>
+                {open && (
+                  <div className="card-expand">
+                    {body}
+                    <button className="text-link" onClick={all} type="button">
+                      Tout afficher <Icon name="chevron" size={15} />
+                    </button>
+                  </div>
+                )}
+              </section>
+            );
+            const day = (iso: string) => new Intl.DateTimeFormat("fr-BE", { weekday: "short", day: "numeric", month: "short" }).format(new Date(iso));
+            const slot = (iso: string) =>
+              new Intl.DateTimeFormat("fr-BE", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }).format(new Date(iso));
+            if (c.id === "nextRental")
+              return shell(
+                "calendar",
+                "PROCHAINE LOCATION",
+                rental?.mail?.configured ? nextRentalText.replace(/^Prochaine location : /, "") : "Relève des e-mails non configurée",
+                null,
+                upcoming === null ? (
+                  <p className="muted small">Chargement…</p>
+                ) : upcoming.length === 0 ? (
+                  <p className="muted small">Aucune location prévue.</p>
+                ) : (
+                  <ul className="conso-trips">
+                    {upcoming.slice(0, 3).map((r) => (
+                      <li key={r.rentalId}>
+                        <div>
+                          <strong>{slot(r.start)}</strong>
+                          <span className="muted small">→ {slot(r.end)}</span>
+                        </div>
+                        <span className="conso-tag">#{r.rentalId}</span>
+                      </li>
+                    ))}
+                  </ul>
+                ),
+                () => setRentalsOpen(true),
               );
             if (c.id === "charges")
-              return (
-                <button aria-label="Statistiques de recharge : voir l’historique" className="card card-link mini-card" key="charges" onClick={() => setChargesOpen(true)} type="button">
-                  <span className="mini-card-icon"><Icon name="bolt" size={20} /></span>
-                  <span className="mini-card-body">
-                    <span className="section-label">RECHARGES · 30 JOURS</span>
-                    <strong>
-                      {charges30
-                        ? `${charges30.kwh.toLocaleString("fr-BE", { maximumFractionDigits: 1 })} kWh · ${charges30.count} recharge${charges30.count > 1 ? "s" : ""}`
-                        : "Historique des recharges"}
-                    </strong>
-                    {lastCharge && (
-                      <small>
-                        Dernière : {new Intl.DateTimeFormat("fr-BE", { weekday: "short", day: "numeric", month: "short" }).format(new Date(lastCharge.start))}
-                        {lastCharge.from != null && lastCharge.to != null ? ` · ${lastCharge.from} % → ${lastCharge.to} %` : ""}
-                      </small>
-                    )}
-                  </span>
-                  <Icon name="chevron" size={19} />
-                </button>
+              return shell(
+                "bolt",
+                "RECHARGES · 30 JOURS",
+                charges30
+                  ? `${charges30.kwh.toLocaleString("fr-BE", { maximumFractionDigits: 1 })} kWh · ${charges30.count} recharge${charges30.count > 1 ? "s" : ""}`
+                  : "Historique des recharges",
+                lastCharge
+                  ? `Dernière : ${day(lastCharge.start)}${lastCharge.from != null && lastCharge.to != null ? ` · ${lastCharge.from} % → ${lastCharge.to} %` : ""}`
+                  : null,
+                chargeList.length === 0 ? (
+                  <p className="muted small">Aucune recharge enregistrée pour l’instant.</p>
+                ) : (
+                  <ul className="conso-trips">
+                    {chargeList.slice(0, 3).map((r) => (
+                      <li key={r.start}>
+                        <div>
+                          <strong>{day(r.start)}</strong>
+                          <span className="muted small">{r.from != null && r.to != null ? `${r.from} % → ${r.to} %` : "—"}</span>
+                        </div>
+                        <strong>{r.kwh != null ? `${r.kwh.toLocaleString("fr-BE")} kWh` : "—"}</strong>
+                      </li>
+                    ))}
+                  </ul>
+                ),
+                () => setChargesOpen(true),
               );
-            return (
-              <button aria-label="Consommation : voir le détail" className="card card-link mini-card" key="consumption" onClick={() => setConsumptionOpen(true)} type="button">
-                <span className="mini-card-icon"><Icon name="route" size={20} /></span>
-                <span className="mini-card-body">
-                  <span className="section-label">CONSOMMATION · 30 JOURS</span>
-                  <strong>
-                    {consumption?.last30.avg != null
-                      ? `${consumption.last30.avg.toLocaleString("fr-BE", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} kWh/100 km`
-                      : "Pas encore assez de trajets"}
-                  </strong>
-                  {consumption?.rangeKm != null && <small>Autonomie réelle ≈ {consumption.rangeKm} km</small>}
-                </span>
-                <Icon name="chevron" size={19} />
-              </button>
+            return shell(
+              "route",
+              "CONSOMMATION · 30 JOURS",
+              consumption?.last30.avg != null
+                ? `${consumption.last30.avg.toLocaleString("fr-BE", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} kWh/100 km`
+                : "Pas encore assez de trajets",
+              consumption?.rangeKm != null ? `Autonomie réelle ≈ ${consumption.rangeKm} km` : null,
+              <>
+                {consumption && <MonthlyChart monthly={consumption.monthly} />}
+                {consumption && consumption.recent.length > 0 && (
+                  <ul className="conso-trips">
+                    {consumption.recent.slice(0, 3).map((t) => (
+                      <li key={t.at}>
+                        <div>
+                          <strong>{day(t.at)}</strong>
+                          <span className="muted small">{t.km.toLocaleString("fr-BE")} km · {t.minutes} min</span>
+                        </div>
+                        <strong>{t.avg != null ? `${t.avg.toLocaleString("fr-BE", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}` : "—"}</strong>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </>,
+              () => setConsumptionOpen(true),
             );
           })}
 
