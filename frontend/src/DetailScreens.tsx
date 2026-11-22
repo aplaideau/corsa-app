@@ -209,6 +209,7 @@ const CARD_LABELS: Record<CardId, { title: string; text: string }> = {
   location: { title: "Position", text: "Carte et adresse de la voiture" },
   nextRental: { title: "Prochaine location", text: "D’après les e-mails Getaround" },
   consumption: { title: "Consommation", text: "Moyenne 30 jours et autonomie réelle" },
+  charges: { title: "Statistiques de recharge", text: "Dernière recharge et historique" },
 };
 
 export function LayoutScreen(
@@ -248,22 +249,10 @@ export function LayoutScreen(
     <DetailShell title="Personnaliser l’accueil" {...shell}>
       <section className="configuration-card notif-card">
         <h3>Toujours affichés</h3>
-        <p className="muted small">La voiture, les commandes et la limite de charge restent en haut de l’accueil.</p>
-        <button
-          aria-pressed={draft.chargeWhenIdle}
-          className="notif-row"
-          disabled={saving}
-          onClick={() => void apply({ ...draft, chargeWhenIdle: !draft.chargeWhenIdle })}
-          type="button"
-        >
-          <span>
-            <strong>Recharge aussi hors charge</strong>
-            <small>Pendant une charge, l’encart s’affiche toujours. Activé : la dernière recharge reste visible ensuite.</small>
-          </span>
-          <span className={`toggle ${draft.chargeWhenIdle ? "on" : ""}`}>
-            <i />
-          </span>
-        </button>
+        <p className="muted small">
+          La voiture, les commandes et la limite de charge restent en haut de l’accueil. Pendant une charge, l’encart de recharge
+          s’affiche automatiquement.
+        </p>
       </section>
       <section className="configuration-card notif-card">
         <h3>Cartes de l’accueil</h3>

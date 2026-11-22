@@ -942,6 +942,23 @@
   transform: translateY(0);
 }
 
+/* menu plus haut que l'écran : il défile, l'en-tête avec la croix reste visible */
+.options-panel {
+  max-height: calc(100dvh - 12px - env(safe-area-inset-top));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.options-panel .panel-title {
+  position: sticky;
+  z-index: 2;
+  top: -10px;
+  margin: 0 -20px 18px;
+  padding: 10px 20px 8px;
+  background: var(--surface);
+}
+
 /* fermé = jamais cliquable, même si l'iPhone a gelé l'animation de fermeture */
 .menu-backdrop:not(.open),
 .options-panel:not(.open) {

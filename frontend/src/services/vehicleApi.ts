@@ -117,8 +117,8 @@ export type Consumption = {
 export const getConsumption = () => request<Consumption>("/api/consumption");
 
 // ---- accueil personnalisable, recharges, locations prévues ----------------------
-export type CardId = "location" | "nextRental" | "consumption";
-export type Layout = { cards: { id: CardId; on: boolean }[]; chargeWhenIdle: boolean };
+export type CardId = "location" | "nextRental" | "consumption" | "charges";
+export type Layout = { cards: { id: CardId; on: boolean }[] };
 export const getLayout = () => request<Layout>("/api/layout");
 export const saveLayout = (layout: Layout) =>
   request<Layout>("/api/layout", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(layout) });

@@ -378,14 +378,14 @@ function changelogSince(previous) {
   return items;
 }
 // accueil personnalisable : cartes affichées et leur ordre (les éléments fixes ne sont pas réglables)
-const LAYOUT_CARDS = ["location", "nextRental", "consumption"];
+const LAYOUT_CARDS = ["location", "nextRental", "consumption", "charges"];
 const layoutFile = path.join(DATA_DIR, "layout.json");
 function readLayout() {
   let saved = {};
   try { saved = JSON.parse(fs.readFileSync(layoutFile, "utf8")); } catch (e) {}
   const cards = (Array.isArray(saved.cards) ? saved.cards : []).filter((c) => c && LAYOUT_CARDS.includes(c.id));
   for (const id of LAYOUT_CARDS) if (!cards.some((c) => c.id === id)) cards.push({ id, on: true });
-  return { cards: cards.map((c) => ({ id: c.id, on: c.on !== false })), chargeWhenIdle: saved.chargeWhenIdle === true };
+  return { cards: cards.map((c) => ({ id: c.id, on: c.on !== false })) };
 }
 app.get("/api/layout", (req, res) => res.json(readLayout()));
 app.put("/api/layout", express.json({ limit: "4kb" }), (req, res) => {
@@ -395,7 +395,7 @@ app.put("/api/layout", express.json({ limit: "4kb" }), (req, res) => {
     .filter((c) => c && LAYOUT_CARDS.includes(c.id) && !seen.has(c.id) && seen.add(c.id))
     .map((c) => ({ id: c.id, on: c.on !== false }));
   fs.mkdirSync(DATA_DIR, { recursive: true });
-  fs.writeFileSync(layoutFile, JSON.stringify({ cards, chargeWhenIdle: body.chargeWhenIdle === true }));
+  fs.writeFileSync(layoutFile, JSON.stringify({ cards }));
   res.json(readLayout());
 });
 

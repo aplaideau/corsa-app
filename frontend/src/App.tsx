@@ -732,8 +732,8 @@ function Dashboard({ onLoggedOut }: { onLoggedOut: () => void }) {
       { id: "location", on: true },
       { id: "nextRental", on: true },
       { id: "consumption", on: true },
+      { id: "charges", on: true },
     ],
-    chargeWhenIdle: false,
   });
   const [consumption, setConsumption] = useState<Consumption | null>(null);
   const [lastCharge, setLastCharge] = useState<ChargingRecord | null>(null);
@@ -747,9 +747,18 @@ function Dashboard({ onLoggedOut }: { onLoggedOut: () => void }) {
     if (cardOn("consumption")) getConsumption().then(setConsumption).catch(() => undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [layout]);
+  const [charges30, setCharges30] = useState<{ count: number; kwh: number } | null>(null);
   useEffect(() => {
-    if (layout.chargeWhenIdle) getChargings().then((r) => setLastCharge(r.chargings[0] ?? null)).catch(() => undefined);
-  }, [layout.chargeWhenIdle]);
+    if (!cardOn("charges")) return;
+    getChargings()
+      .then((r) => {
+        setLastCharge(r.chargings[0] ?? null);
+        const recent = r.chargings.filter((c) => Date.now() - new Date(c.start).getTime() < 30 * 86400000);
+        setCharges30({ count: recent.length, kwh: recent.reduce((a, c) => a + (c.kwh ?? 0), 0) });
+      })
+      .catch(() => undefined);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [layout]);
   const [releasesOpen, setReleasesOpen] = useState(
     () => new URLSearchParams(window.location.search).get("view") === "releases",
   );
@@ -1210,6 +1219,8 @@ function Dashboard({ onLoggedOut }: { onLoggedOut: () => void }) {
           />
         </section>
 
+        {vehicle.charging && <ChargeInformation vehicle={{ ...vehicle, chargeLimit }} />}
+
         <section className="charge-card card">
           <div className="card-heading">
             <div>
@@ -1243,29 +1254,6 @@ function Dashboard({ onLoggedOut }: { onLoggedOut: () => void }) {
           </div>
         </section>
 
-        {vehicle.charging ? (
-          <button aria-label="Recharge : voir l’historique" className="card-link charge-link" onClick={() => setChargesOpen(true)} type="button">
-            <ChargeInformation vehicle={{ ...vehicle, chargeLimit }} />
-          </button>
-        ) : (
-          layout.chargeWhenIdle && (
-            <button aria-label="Recharges : voir l’historique" className="card card-link mini-card" onClick={() => setChargesOpen(true)} type="button">
-              <span className="mini-card-icon"><Icon name="bolt" size={20} /></span>
-              <span className="mini-card-body">
-                <span className="section-label">DERNIÈRE RECHARGE</span>
-                <strong>
-                  {lastCharge
-                    ? `${new Intl.DateTimeFormat("fr-BE", { weekday: "short", day: "numeric", month: "short" }).format(new Date(lastCharge.start))}${lastCharge.kwh != null ? ` · ${lastCharge.kwh.toLocaleString("fr-BE")} kWh` : ""}`
-                    : "Aucune recharge enregistrée"}
-                </strong>
-                {lastCharge && lastCharge.from != null && lastCharge.to != null && (
-                  <small>{lastCharge.from} % → {lastCharge.to} %</small>
-                )}
-              </span>
-              <Icon name="chevron" size={19} />
-            </button>
-          )
-        )}
 
 
         {layout.cards
@@ -1279,6 +1267,27 @@ function Dashboard({ onLoggedOut }: { onLoggedOut: () => void }) {
                   <span className="mini-card-body">
                     <span className="section-label">PROCHAINE LOCATION</span>
                     <strong>{rental?.mail?.configured ? nextRentalText.replace(/^Prochaine location : /, "") : "Relève des e-mails non configurée"}</strong>
+                  </span>
+                  <Icon name="chevron" size={19} />
+                </button>
+              );
+            if (c.id === "charges")
+              return (
+                <button aria-label="Statistiques de recharge : voir l’historique" className="card card-link mini-card" key="charges" onClick={() => setChargesOpen(true)} type="button">
+                  <span className="mini-card-icon"><Icon name="bolt" size={20} /></span>
+                  <span className="mini-card-body">
+                    <span className="section-label">RECHARGES · 30 JOURS</span>
+                    <strong>
+                      {charges30
+                        ? `${charges30.kwh.toLocaleString("fr-BE", { maximumFractionDigits: 1 })} kWh · ${charges30.count} recharge${charges30.count > 1 ? "s" : ""}`
+                        : "Historique des recharges"}
+                    </strong>
+                    {lastCharge && (
+                      <small>
+                        Dernière : {new Intl.DateTimeFormat("fr-BE", { weekday: "short", day: "numeric", month: "short" }).format(new Date(lastCharge.start))}
+                        {lastCharge.from != null && lastCharge.to != null ? ` · ${lastCharge.from} % → ${lastCharge.to} %` : ""}
+                      </small>
+                    )}
                   </span>
                   <Icon name="chevron" size={19} />
                 </button>
@@ -1516,23 +1525,6 @@ function Dashboard({ onLoggedOut }: { onLoggedOut: () => void }) {
           <span>
             <strong>Personnaliser l’accueil</strong>
             <small>Cartes affichées et leur ordre</small>
-          </span>
-          <Icon name="chevron" size={19} />
-        </button>
-        <button
-          className="option-row"
-          onClick={() => {
-            setMenuOpen(false);
-            setConsumptionOpen(true);
-          }}
-          type="button"
-        >
-          <span className="option-icon">
-            <Icon name="bolt" />
-          </span>
-          <span>
-            <strong>Consommation</strong>
-            <small>Moyennes et derniers trajets</small>
           </span>
           <Icon name="chevron" size={19} />
         </button>
