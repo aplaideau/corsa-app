@@ -14,6 +14,7 @@ const TYPES = {
   charge_done: "Charge terminée",
   car_asleep: "Voiture en veille pendant la charge",
   charge_interrupted: "Charge interrompue",
+  charge_fast: "Charge rapide",
   battery_low: "Batterie basse",
   technical: "Problème technique",
   update: "Mise à jour installée",
@@ -152,27 +153,54 @@ function startVehicleMonitor({ notifier, getStatus, getMailError, intervalMs = 1
       }
     } else st.techMailNotified = false;
 
-    // --- fin de charge / charge interrompue
-    const prev = st.chargeStatus;
+    // --- début et fin de charge. Les données Stellantis peuvent osciller (état en retard puis rafraîchi) :
+    // un arrêt n'est retenu que s'il se voit sur 2 relevés de suite, dont au moins un plus récent
+    // que le dernier relevé « en charge ». Sinon : pas de notification (évite les fausses alertes).
     const threshold = v.threshold || 100;
-    if (prev === "InProgress" && v.chargeStatus && v.chargeStatus !== "InProgress") {
-      const reached = v.level >= Math.min(threshold, 100) - 2 || v.chargeStatus === "Finished";
-      if (reached) {
-        await notifier.notify("charge_done", "Charge terminée",
-          `Batterie à ${v.level} %${v.autonomy ? ` · ${v.autonomy} km d'autonomie` : ""}.`, { tag: "charge" });
-      } else {
-        await notifier.notify("charge_interrupted", "Charge interrompue",
-          `La charge s'est arrêtée à ${v.level} %, avant ta limite de ${threshold} %${v.plugged ? "" : " (câble débranché)"}.`, { tag: "charge" });
+    const dataMs = v.updatedAt ? new Date(String(v.updatedAt).replace(" ", "T")).getTime() : NaN;
+    if (v.chargeStatus === "InProgress") {
+      if (st.chargeStatus !== "InProgress") {
+        st.sessionFast = Boolean(v.fast);
+        st.fastNotified = false;
       }
+      if (v.fast) st.sessionFast = true;
+      if (st.sessionFast && !st.fastNotified) {
+        st.fastNotified = true;
+        await notifier.notify("charge_fast", "Charge rapide en cours",
+          `Batterie à ${v.level} % : sur une borne rapide, la limite de ${threshold} % ne s'applique pas.`, { tag: "charge" });
+      }
+      st.chargeStatus = "InProgress";
+      st.chargeDataMs = Number.isFinite(dataMs) ? dataMs : st.chargeDataMs;
+      st.pendingStop = null;
+    } else if (st.chargeStatus === "InProgress" && v.chargeStatus) {
+      const newer = Number.isFinite(dataMs) && (!st.chargeDataMs || dataMs > st.chargeDataMs);
+      st.pendingStop = { count: ((st.pendingStop && st.pendingStop.count) || 0) + 1, newer: Boolean((st.pendingStop && st.pendingStop.newer) || newer) };
+      if (st.pendingStop.count >= 2 && st.pendingStop.newer) {
+        const reached = v.level >= Math.min(threshold, 100) - 2 || v.chargeStatus === "Finished";
+        if (st.sessionFast) {
+          await notifier.notify("charge_done", "Charge rapide terminée",
+            `Batterie à ${v.level} %${v.autonomy ? ` · ${v.autonomy} km d'autonomie` : ""}.`, { tag: "charge" });
+        } else if (reached) {
+          await notifier.notify("charge_done", "Charge terminée",
+            `Batterie à ${v.level} %${v.autonomy ? ` · ${v.autonomy} km d'autonomie` : ""}.`, { tag: "charge" });
+        } else {
+          await notifier.notify("charge_interrupted", "Charge interrompue",
+            `La charge s'est arrêtée à ${v.level} %, avant ta limite de ${threshold} %${v.plugged ? "" : " (câble débranché)"}.`, { tag: "charge" });
+        }
+        st.chargeStatus = v.chargeStatus;
+        st.pendingStop = null;
+        st.sessionFast = false;
+      }
+    } else if (v.chargeStatus) {
+      st.chargeStatus = v.chargeStatus;
     }
-    if (v.chargeStatus) st.chargeStatus = v.chargeStatus;
 
     // --- voiture en veille pendant une charge : ses données ne bougent plus, la limite ne peut pas agir
     const updatedMs = v.updatedAt ? new Date(String(v.updatedAt).replace(" ", "T")).getTime() : NaN;
     const ageMin = Number.isFinite(updatedMs) ? (Date.now() - updatedMs) / 60000 : null;
     if (ageMin !== null) {
       const hhmm = new Intl.DateTimeFormat("fr-BE", { timeZone: "Europe/Brussels", hour: "2-digit", minute: "2-digit" }).format(new Date(updatedMs));
-      if (!st.asleepNotified && v.chargeStatus === "InProgress" && ageMin > 30) {
+      if (!st.asleepNotified && v.chargeStatus === "InProgress" && !st.sessionFast && ageMin > 30) {
         st.asleepNotified = true;
         await notifier.notify("car_asleep", "La voiture dort pendant la charge",
           `Dernières données à ${hhmm} (${v.level} %) : la limite de ${threshold} % ne peut pas agir. Déverrouille-la pour la réveiller.`,

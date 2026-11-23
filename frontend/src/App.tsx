@@ -284,7 +284,7 @@ function ChargeInformation({ vehicle }: { vehicle: VehicleSnapshot }) {
         </span>
         <div>
           <span className="section-label">SESSION DE RECHARGE</span>
-          <strong>{remainingMinutes === 0 ? "Limite atteinte" : "Recharge en cours"}</strong>
+          <strong>{vehicle.fastCharge ? "Charge rapide en cours" : remainingMinutes === 0 ? "Limite atteinte" : "Recharge en cours"}</strong>
         </div>
         {vehicle.updatedAt && Date.now() - vehicle.updatedAt.getTime() > 15 * 60000 ? (
           <span className="live-label asleep">🌙 EN VEILLE · {formatTime(vehicle.updatedAt)}</span>
@@ -319,7 +319,7 @@ function ChargeInformation({ vehicle }: { vehicle: VehicleSnapshot }) {
         <span>
           Fin estimée à <strong>{completionTime}</strong>
         </span>
-        <span>Objectif {chargeLimit}%</span>
+        <span>{vehicle.fastCharge ? "Charge rapide · limite non applicable" : `Objectif ${chargeLimit}%`}</span>
       </div>
     </section>
   );
@@ -1028,7 +1028,7 @@ function Dashboard({ onLoggedOut }: { onLoggedOut: () => void }) {
   const statusText = vehicle.driving
     ? `En route${vehicle.speedKmh ? ` · ${vehicle.speedKmh} km/h` : ""}`
     : vehicle.charging
-      ? `En charge${powerKw ? ` · ${powerKw.toLocaleString("fr-BE", { maximumFractionDigits: 1 })} kW` : ""}`
+      ? `${vehicle.fastCharge ? "Charge rapide" : "En charge"}${powerKw ? ` · ${powerKw.toLocaleString("fr-BE", { maximumFractionDigits: 1 })} kW` : ""}`
       : vehicle.plugged
         ? vehicle.chargeStatus === "Finished"
           ? "Branchée · charge terminée"
@@ -1267,7 +1267,7 @@ function Dashboard({ onLoggedOut }: { onLoggedOut: () => void }) {
           />
           <div className="range-labels">
             <span>50%</span>
-            <span>Usage quotidien recommandé : 80%</span>
+            <span>{vehicle.charging && vehicle.fastCharge ? "Charge rapide : la limite ne s’applique pas" : "Usage quotidien recommandé : 80%"}</span>
             <span>100%</span>
           </div>
         </section>

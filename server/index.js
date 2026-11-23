@@ -578,6 +578,7 @@ async function readVehicleStatus() {
     autonomy: e.autonomy ? Math.round(Number(e.autonomy)) : null,
     chargeStatus: String(c.status || "").split(".").pop() || null,
     plugged: Boolean(c.plugged),
+    fast: /quick|fast/i.test(String(c.charging_mode || "")), // charge rapide (DC) : la limite ne peut pas agir
     moving: Boolean(info.kinetic && info.kinetic.moving),
     threshold: cc && cc.percentage_threshold ? Number(cc.percentage_threshold) : 100,
     updatedAt: e.updated_at || null, // dernières données envoyées par la voiture
