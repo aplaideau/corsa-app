@@ -3,7 +3,8 @@
 # l'appli masque la position pendant la location et efface le parcours à la fin.
 # Ce script, lancé chaque minute par systemd :
 #  1) remet l'enregistrement s'il était coupé (anciennes versions qui le coupaient en location) ;
-#  2) applique les effacements de parcours demandés par l'appli en fin de location
+#  2) pendant une location, efface chaque minute les positions depuis son début ;
+#     puis applique les effacements de parcours demandés par l'appli en fin de location
 #     (data/privacy-queue.json) : latitude, longitude et altitude mises à NULL dans la base de
 #     psacc pour la période de la location. Trajets (km, consommation) et recharges restent.
 set -euo pipefail
@@ -37,17 +38,29 @@ if db is None:
     sys.stderr.write("base psacc introuvable\n"); sys.exit(2)
 iso = lambda s: datetime.fromisoformat(s.replace("Z", "+00:00"))
 sql = lambda d: d.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
-start, end = iso(job["from"]), iso(job["to"])
-if end > datetime.now(timezone.utc):
+live = job["to"] == "now"  # location en cours : effacement continu jusqu'à maintenant
+start = iso(job["from"])
+end = datetime.now(timezone.utc) if live else iso(job["to"])
+if not live and end > datetime.now(timezone.utc):
     sys.exit(3)  # marge de fin pas encore écoulée : on réessaiera
 conn = sqlite3.connect(db, timeout=30)
 cur = conn.execute("UPDATE position SET latitude=NULL, longitude=NULL, altitude=NULL "
                    "WHERE Timestamp >= ? AND Timestamp <= ? AND (latitude IS NOT NULL OR longitude IS NOT NULL)",
                    (sql(start), sql(end)))
 conn.commit(); conn.close()
-print("parcours efface : %d positions (%s -> %s UTC)" % (cur.rowcount, sql(start), sql(end)))
+if cur.rowcount or not live:
+    print("parcours efface%s : %d positions (%s -> %s UTC)" % (" (location en cours)" if live else "", cur.rowcount, sql(start), sql(end)))
 PY
 )
+# location en cours : effacement chaque minute depuis le début de la location
+if [ -s data/privacy-live.json ]; then
+  if out=$(docker exec -i psacc python3 -c "$SCRUB" < data/privacy-live.json 2>&1); then
+    [ -n "$out" ] && echo "$(date -Is) $out" >> data/privacy.log
+  else
+    echo "$(date -Is) échec effacement continu : $out" >> data/privacy.log
+  fi
+fi
+
 for job in data/privacy-queue/*.json; do
   [ -e "$job" ] || continue
   if out=$(docker exec -i psacc python3 -c "$SCRUB" < "$job" 2>&1); then

@@ -189,7 +189,9 @@ Internet, le reste de l'appli reste privé derrière Tailscale.
 
 psacc enregistre en permanence, y compris pendant les locations : les trajets (kilomètres,
 consommation) et les recharges des locations figurent donc dans les historiques, avec les vraies
-données de psacc. Pendant la location, l'appli masque la position et coupe ABRP. À la fin,
+données de psacc. Pendant la location, l'appli masque la position et coupe ABRP, et `deploy/rental-sync.sh`
+efface chaque minute les positions enregistrées depuis le début de la location
+(`data/privacy-live.json`) : aucune position n'est conservée plus d'une minute. À la fin,
 l'appli dépose la période dans `data/privacy-queue/` et `deploy/rental-sync.sh` (chaque minute)
 met à NULL latitude, longitude et altitude des relevés de cette période dans la base de psacc
 (exécuté dans le conteneur psacc). Journal : `data/privacy.log`.

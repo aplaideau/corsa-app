@@ -265,6 +265,10 @@ function writeState(state) {
 }
 const schedule = createSchedule({ dataDir: DATA_DIR });
 const rentalPrivacy = createRentalPrivacy({ dataDir: DATA_DIR });
+{ // location déjà en cours au démarrage : reprendre l'effacement en continu
+  const r = readState().rental || {};
+  if (r.enabled) rentalPrivacy.rentalActive({ from: r.startedAt || r.since });
+}
 let abrpShare = null; // partage du niveau vers l'ABRP du locataire
 const rentalActive = () => Boolean(readState().rental && readState().rental.enabled);
 
@@ -326,6 +330,7 @@ async function setRentalMode(enabled, meta = {}) {
       startedAt: (unlockedAt && unlockedAt < now ? unlockedAt : now).toISOString(),
       source: meta.source || "manual", rentalId: meta.rentalId || null, plannedEnd: meta.plannedEnd || null,
     };
+    rentalPrivacy.rentalActive({ from: state.rental.startedAt });
   } else {
     for (const v of current.abrpVins || []) {
       try { await psacc(`/abrp?vin=${encodeURIComponent(v)}&enable=1`); } catch (e) {}
