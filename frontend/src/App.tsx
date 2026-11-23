@@ -951,7 +951,7 @@ function Dashboard({ onLoggedOut }: { onLoggedOut: () => void }) {
     if (
       enable &&
       !window.confirm(
-        "Activer le mode location ?\n\nLa position sera masquée, les trajets ne seront plus enregistrés et l’envoi vers ABRP sera coupé. La limite de charge reste active.",
+        "Activer le mode location ?\n\nLa position sera masquée et l’envoi vers ABRP coupé. Les trajets et recharges restent enregistrés ; le parcours sera effacé à la fin de la location. La limite de charge reste active.",
       )
     )
       return;
@@ -1085,7 +1085,7 @@ function Dashboard({ onLoggedOut }: { onLoggedOut: () => void }) {
               </h2>
               <p>
                 {rentalOn
-                  ? "Mode location : la position n’est ni affichée ni enregistrée"
+                  ? "Mode location : position masquée, parcours effacé à la fin de la location"
                   : [vehicle.address, updatedLabel ? `mise à jour à ${updatedLabel}` : null]
                       .filter(Boolean)
                       .join(" · ") || "Position inconnue"}
@@ -1153,7 +1153,6 @@ function Dashboard({ onLoggedOut }: { onLoggedOut: () => void }) {
             <span>
               {rentalBanner}
               {rental?.renterAbrp?.linked ? " · ABRP du locataire relié" : ""}
-              {rental?.recording === "on" ? " (application en cours…)" : ""}
             </span>
             <span>Gérer</span>
           </button>
@@ -1519,7 +1518,7 @@ function Dashboard({ onLoggedOut }: { onLoggedOut: () => void }) {
               {rentalBusy
                 ? "Application…"
                 : rentalOn
-                  ? "Position masquée, trajets non enregistrés"
+                  ? "Position masquée, parcours effacé à la fin"
                   : "À activer pendant une location Getaround"}
               {mailInfo && (
                 <>

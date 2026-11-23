@@ -157,7 +157,7 @@ export function ConsumptionScreen({ backIcon, closeIcon, onClose }: { backIcon: 
                 </ul>
               )}
               <p className="muted small">
-                Vos trajets uniquement : rien n’est enregistré pendant les locations.
+                Trajets des locations compris (kilomètres et consommation ; le parcours est effacé).
                 {data.since ? ` Historique depuis le ${new Intl.DateTimeFormat("fr-BE", { day: "numeric", month: "long" }).format(new Date(data.since))}.` : ""}
               </p>
             </section>

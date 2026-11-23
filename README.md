@@ -183,3 +183,13 @@ Internet, le reste de l'appli reste privé derrière Tailscale.
    si l'OAuth est accordé), puis `sudo docker compose up -d`.
 3. Publier ce seul port : `sudo tailscale funnel --bg --https=8443 http://127.0.0.1:8081`.
 4. Adresse du QR code : `https://<machine>.<tailnet>.ts.net:8443/a/<PUBLIC_SHARE_TOKEN>`.
+
+
+## Mode location et vie privée
+
+psacc enregistre en permanence, y compris pendant les locations : les trajets (kilomètres,
+consommation) et les recharges des locations figurent donc dans les historiques, avec les vraies
+données de psacc. Pendant la location, l'appli masque la position et coupe ABRP. À la fin,
+l'appli dépose la période dans `data/privacy-queue/` et `deploy/rental-sync.sh` (chaque minute)
+met à NULL latitude, longitude et altitude des relevés de cette période dans la base de psacc
+(exécuté dans le conteneur psacc). Journal : `data/privacy.log`.

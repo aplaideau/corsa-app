@@ -104,7 +104,7 @@ export function ChargesScreen(props: Omit<ShellProps, "title" | "children">) {
                 ))}
               </ul>
             )}
-            <p className="muted small">Vos recharges uniquement : rien n’est enregistré pendant les locations.</p>
+            <p className="muted small">Recharges faites pendant les locations comprises.</p>
           </section>
         </>
       )}
@@ -183,7 +183,7 @@ export function LocationScreen(
         {hidden ? (
           <>
             <h3>Position masquée</h3>
-            <p className="muted">Mode location : la position n’est ni affichée ni enregistrée.</p>
+            <p className="muted">Mode location : la position n’est pas affichée, et le parcours est effacé à la fin de la location.</p>
           </>
         ) : (
           <>

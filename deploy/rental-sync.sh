@@ -1,6 +1,11 @@
 #!/bin/bash
-# Mode location : relance psacc SANS enregistrement (trajets, positions) pendant une location.
-# L'appli écrit data/state.json ; ce script, lancé chaque minute par systemd, applique le mode.
+# psacc enregistre en permanence (trajets, recharges), y compris pendant les locations :
+# l'appli masque la position pendant la location et efface le parcours à la fin.
+# Ce script, lancé chaque minute par systemd :
+#  1) remet l'enregistrement s'il était coupé (anciennes versions qui le coupaient en location) ;
+#  2) applique les effacements de parcours demandés par l'appli en fin de location
+#     (data/privacy-queue.json) : latitude, longitude et altitude mises à NULL dans la base de
+#     psacc pour la période de la location. Trajets (km, consommation) et recharges restent.
 set -euo pipefail
 # dossier de l'installation (celui qui contient docker-compose.yml et data/)
 DIR="$(dirname "$(readlink -f "$0")")"
@@ -8,15 +13,9 @@ DIR="$(dirname "$(readlink -f "$0")")"
 cd "$DIR"
 mkdir -p data
 
-STATE=data/state.json
 WITH_RECORD="-c -r --web-conf"     # options par défaut de l'image psacc
-WITHOUT_RECORD="-c --web-conf"     # limite de charge conservée, rien n'est enregistré
 
-if grep -q '"enabled":true' "$STATE" 2>/dev/null; then
-  want="$WITHOUT_RECORD"; recording=off
-else
-  want="$WITH_RECORD"; recording=on
-fi
+want="$WITH_RECORD"; recording=on
 
 current=$(docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' psacc 2>/dev/null \
   | sed -n 's/^PSACC_OPTIONS=//p')
@@ -26,3 +25,35 @@ if [ "$current" != "$want" ]; then
   PSACC_OPTIONS="$want" docker compose up -d psacc
 fi
 echo "$recording" > data/recording
+
+# 2) effacement du parcours des locataires (exécuté dans le conteneur psacc, propriétaire de la base)
+#    un fichier par location dans data/privacy-queue/ ; supprimé une fois l'effacement fait
+SCRUB=$(cat <<'PY'
+import json, sqlite3, sys, os
+from datetime import datetime, timezone
+job = json.load(sys.stdin)
+db = next((p for p in ("/config/info.db", "info.db") if os.path.exists(p)), None)
+if db is None:
+    sys.stderr.write("base psacc introuvable\n"); sys.exit(2)
+iso = lambda s: datetime.fromisoformat(s.replace("Z", "+00:00"))
+sql = lambda d: d.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+start, end = iso(job["from"]), iso(job["to"])
+if end > datetime.now(timezone.utc):
+    sys.exit(3)  # marge de fin pas encore écoulée : on réessaiera
+conn = sqlite3.connect(db, timeout=30)
+cur = conn.execute("UPDATE position SET latitude=NULL, longitude=NULL, altitude=NULL "
+                   "WHERE Timestamp >= ? AND Timestamp <= ? AND (latitude IS NOT NULL OR longitude IS NOT NULL)",
+                   (sql(start), sql(end)))
+conn.commit(); conn.close()
+print("parcours efface : %d positions (%s -> %s UTC)" % (cur.rowcount, sql(start), sql(end)))
+PY
+)
+for job in data/privacy-queue/*.json; do
+  [ -e "$job" ] || continue
+  if out=$(docker exec -i psacc python3 -c "$SCRUB" < "$job" 2>&1); then
+    echo "$(date -Is) $out" >> data/privacy.log
+    rm -f "$job"
+  elif [ $? -ne 3 ]; then
+    echo "$(date -Is) échec effacement ($job) : $out" >> data/privacy.log
+  fi
+done

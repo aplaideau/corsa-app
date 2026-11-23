@@ -8,6 +8,7 @@ const bcrypt = require("bcryptjs");
 const { createProxyMiddleware } = require("http-proxy-middleware");
 const { startMailWatcher, BOOKING_TYPES, brusselsDate } = require("./getaround-mail");
 const { createSchedule } = require("./schedule");
+const { createRentalPrivacy } = require("./rental-privacy");
 const { startAbrpShare } = require("./abrp-share");
 const { createNotifier, startVehicleMonitor } = require("./notifications");
 
@@ -263,6 +264,7 @@ function writeState(state) {
   fs.renameSync(STATE_FILE + ".tmp", STATE_FILE);
 }
 const schedule = createSchedule({ dataDir: DATA_DIR });
+const rentalPrivacy = createRentalPrivacy({ dataDir: DATA_DIR });
 let abrpShare = null; // partage du niveau vers l'ABRP du locataire
 const rentalActive = () => Boolean(readState().rental && readState().rental.enabled);
 
@@ -316,14 +318,20 @@ async function setRentalMode(enabled, meta = {}) {
       abrpVins = abrp.abrp_enable_vin || [];
       for (const v of abrpVins) await psacc(`/abrp?vin=${encodeURIComponent(v)}&enable=0`);
     } catch (e) { console.warn("mode location : ABRP non modifié", e.message); }
+    const now = new Date();
+    const unlockedAt = meta.startedAt ? new Date(meta.startedAt) : null;
     state.rental = {
-      enabled: true, since: new Date().toISOString(), abrpVins,
+      enabled: true, since: now.toISOString(), abrpVins,
+      // début réel (déverrouillage d'après l'e-mail) s'il est antérieur : le parcours sera effacé depuis là
+      startedAt: (unlockedAt && unlockedAt < now ? unlockedAt : now).toISOString(),
       source: meta.source || "manual", rentalId: meta.rentalId || null, plannedEnd: meta.plannedEnd || null,
     };
   } else {
     for (const v of current.abrpVins || []) {
       try { await psacc(`/abrp?vin=${encodeURIComponent(v)}&enable=1`); } catch (e) {}
     }
+    // fin de location : effacer le parcours du locataire dans la base de psacc (trajets et recharges restent)
+    rentalPrivacy.rentalEnded({ from: current.startedAt || current.since, to: new Date() });
     state.rental = { enabled: false, since: null, source: meta.source || "manual" };
   }
   writeState(state);
@@ -635,7 +643,7 @@ async function onGetaroundEvent(event) {
       return;
     }
     await setRentalMode(true, {
-      source: "email", rentalId: event.rentalId,
+      source: "email", rentalId: event.rentalId, startedAt: at.toISOString(),
       plannedEnd: event.plannedEnd ? event.plannedEnd.toISOString() : null,
     });
     await notifier.notify("rental_start", `Location #${event.rentalId} débutée`,
@@ -707,7 +715,7 @@ app.get(["/corsa", "/seuil", "/setup"], (req, res) => sendApp(res));
 const RENTAL_ALLOWED = [/^\/get_vehicles$/, /^\/charge_control$/, /^\/charge_now\//, /^\/preconditioning\//, /^\/wakeup\//];
 app.use((req, res, next) => {
   if (!rentalActive() || RENTAL_ALLOWED.some((r) => r.test(req.path))) return next();
-  const msg = "Mode location actif : la position, les trajets et le verrouillage sont désactivés.";
+  const msg = "Mode location actif : la position et le verrouillage sont désactivés.";
   if ((req.headers.accept || "").includes("text/html")) return res.status(423).send(`<p style="font-family:sans-serif;padding:2em">${msg}</p>`);
   res.status(423).json({ error: msg });
 });

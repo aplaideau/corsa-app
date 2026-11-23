@@ -21,9 +21,8 @@ if ! as_owner git fetch -q origin main || ! as_owner git merge -q --ff-only orig
 fi
 after="$(as_owner git rev-parse HEAD)"
 
-# 2) même logique que rental-sync.sh : pas d'enregistrement pendant une location
-if grep -q '"enabled":true' data/state.json 2>/dev/null; then export PSACC_OPTIONS="-c --web-conf"
-else export PSACC_OPTIONS="-c -r --web-conf"; fi
+# 2) psacc enregistre en permanence (le parcours des locataires est effacé par l'appli en fin de location)
+export PSACC_OPTIONS="-c -r --web-conf"
 
 # 3) image de l'appli : téléchargée seulement si GitHub en a publié une nouvelle
 image="$(docker compose config --images | grep corsa-app | head -n1)"
