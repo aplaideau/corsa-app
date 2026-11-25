@@ -117,7 +117,18 @@ export type Consumption = {
 export const getConsumption = () => request<Consumption>("/api/consumption");
 
 // ---- accueil personnalisable, recharges, locations prévues ----------------------
-export type CardId = "location" | "nextRental" | "consumption" | "charges";
+export type CardId = "location" | "nextRental" | "consumption" | "charges" | "revenue";
+
+// ---- revenus (factures Getaround) ----------------------------------------------
+export type RevenueMonth = { month: string; total: number; count: number };
+export type Revenue = {
+  thisMonth: RevenueMonth;
+  prevMonth: RevenueMonth;
+  months: RevenueMonth[];
+  invoices: { id: number | string; rentalId: string; at: string; amount: number; currency: string }[];
+  currency: string;
+};
+export const getRevenue = () => request<Revenue>("/api/revenue");
 export type Layout = { cards: { id: CardId; on: boolean }[] };
 export const getLayout = () => request<Layout>("/api/layout");
 export const saveLayout = (layout: Layout) =>

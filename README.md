@@ -185,6 +185,21 @@ Internet, le reste de l'appli reste privé derrière Tailscale.
 4. Adresse du QR code : `https://<machine>.<tailnet>.ts.net:8443/a/<PUBLIC_SHARE_TOKEN>`.
 
 
+## API Getaround
+
+Avec `GETAROUND_TOKEN` dans `.env`, l'appli interroge l'API propriétaire Getaround toutes les 10 minutes
+(locations réservées, check-in / check-out) et met à jour le planning et le mode location. Les e-mails restent
+un secours : un même début ou une même fin n'est traité qu'une fois, quelle que soit la source.
+
+- **Webhooks (temps réel)** : demander au chargé de compte Getaround d'enregistrer
+  `https://<machine>.<tailnet>.ts.net:8443/getaround/webhook` (serveur public, Tailscale Funnel 8443 → 8081)
+  et mettre le secret reçu dans `GETAROUND_WEBHOOK_SECRET`. Les requêtes non signées sont refusées (401).
+  Une annulation n'arrive que par webhook (`rental.canceled`) ou par e-mail.
+- **Plusieurs voitures** : `GETAROUND_CAR_IDS=1433374,…` limite le suivi à ces voitures (vide = toutes).
+- **Revenus** : carte d'accueil et écran détaillé, d'après les factures Getaround (3 derniers mois, cache 30 min).
+  La carte est masquée tant que l'API n'est pas configurée.
+- Aucun message n'est envoyé aux locataires par l'appli (les messages automatiques Getaround s'en chargent).
+
 ## Mode location et vie privée
 
 psacc enregistre en permanence, y compris pendant les locations : les trajets (kilomètres,

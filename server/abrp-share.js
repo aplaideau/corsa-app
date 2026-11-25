@@ -57,7 +57,7 @@ const lang = (h = "") => {
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const same = (a, b) => { const x = Buffer.from(String(a)); const y = Buffer.from(String(b)); return x.length === y.length && crypto.timingSafeEqual(x, y); };
 
-function startAbrpShare({ port, shareToken, publicBaseUrl, apiKey, clientId, dataDir, getStatus, getRental, log = console }) {
+function startAbrpShare({ app: sharedApp, port, shareToken, publicBaseUrl, apiKey, clientId, dataDir, getStatus, getRental, log = console }) {
   if (!shareToken || shareToken.length < 12 || !apiKey) {
     log.log("partage ABRP locataire : désactivé (PUBLIC_SHARE_TOKEN ou ABRP_API_KEY manquant)");
     return null;
@@ -92,9 +92,11 @@ function startAbrpShare({ port, shareToken, publicBaseUrl, apiKey, clientId, dat
   setInterval(() => sendOnce().catch((e) => log.warn("partage ABRP locataire :", e.message)), 60000);
 
   // ---- page publique ----
-  const app = express();
-  app.disable("x-powered-by");
-  app.set("trust proxy", "loopback");
+  const app = sharedApp || express();
+  if (!sharedApp) {
+    app.disable("x-powered-by");
+    app.set("trust proxy", "loopback");
+  }
   app.use(express.urlencoded({ extended: false, limit: "4kb" }));
   const hits = new Map();
   app.use((req, res, next) => {
@@ -193,8 +195,10 @@ label{display:block;font-weight:600;margin-bottom:6px}input{width:100%;min-heigh
 
   app.post("/a/:t/unlink", gate, sameOrigin, (req, res) => { save({}); res.redirect(303, sharePath); });
 
-  app.use((req, res) => res.status(404).end());
-  app.listen(Number(port), () => log.log(`partage ABRP locataire : page publique sur :${port}`));
+  if (!sharedApp) {
+    app.use((req, res) => res.status(404).end());
+    app.listen(Number(port), () => log.log(`partage ABRP locataire : page publique sur :${port}`));
+  }
 
   return { status: () => { const l = load(); const rid = currentRental(); return { linked: Boolean(rid && l.token && l.rentalId === rid), lastSentAt: l.lastSentAt || null }; } };
 }

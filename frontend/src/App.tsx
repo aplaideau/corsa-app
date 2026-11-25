@@ -17,12 +17,12 @@ import {
   type RentalMode,
   type SetupStatus,
   type VehicleCommand,
-  type VehicleSnapshot, getLayout, getConsumption, getChargings, getUpcomingRentals, type UpcomingRental, type CardId, type Layout, type Consumption, type ChargingRecord } from "./services/vehicleApi";
+  type VehicleSnapshot, getLayout, getConsumption, getRevenue, type Revenue, getChargings, getUpcomingRentals, type UpcomingRental, type CardId, type Layout, type Consumption, type ChargingRecord } from "./services/vehicleApi";
 import { VehicleMap } from "./VehicleMap";
 import { NotificationsScreen } from "./NotificationsScreen";
 import { ReleasesScreen } from "./ReleasesScreen";
 import { ConsumptionScreen, MonthlyChart } from "./ConsumptionScreen";
-import { ChargesScreen, LayoutScreen, LocationScreen, RentalsScreen } from "./DetailScreens";
+import { ChargesScreen, LayoutScreen, LocationScreen, RentalsScreen, RevenueScreen, eur, monthName } from "./DetailScreens";
 
 type IconName =
   | "arrowLeft"
@@ -48,6 +48,7 @@ type IconName =
   | "power"
   | "refresh"
   | "route"
+  | "wallet"
   | "sun"
   | "unlock";
 
@@ -78,6 +79,12 @@ const icons: Record<IconName, ReactNode> = {
     <>
       <path d="M6 9a6 6 0 0 1 12 0c0 6 2.5 7.5 2.5 7.5h-17S6 15 6 9Z" />
       <path d="M10 20a2 2 0 0 0 4 0" />
+    </>
+  ),
+  wallet: (
+    <>
+      <rect x="3" y="6" width="18" height="14" rx="2" />
+      <path d="M3 10h18M16 15h2M7 6l9-3 1 3" />
     </>
   ),
   bolt: <path d="m13 2-8 12h7l-1 8 8-12h-7l1-8Z" />,
@@ -727,12 +734,15 @@ function Dashboard({ onLoggedOut }: { onLoggedOut: () => void }) {
   const [rentalsOpen, setRentalsOpen] = useState(false);
   const [locationOpen, setLocationOpen] = useState(false);
   const [layoutOpen, setLayoutOpen] = useState(false);
+  const [revenueOpen, setRevenueOpen] = useState(false);
+  const [revenue, setRevenue] = useState<Revenue | null | "off">(null);
   const [layout, setLayout] = useState<Layout>({
     cards: [
       { id: "location", on: true },
       { id: "nextRental", on: true },
       { id: "consumption", on: true },
       { id: "charges", on: true },
+      { id: "revenue", on: true },
     ],
   });
   const [consumption, setConsumption] = useState<Consumption | null>(null);
@@ -749,6 +759,11 @@ function Dashboard({ onLoggedOut }: { onLoggedOut: () => void }) {
   const cardOn = (id: string) => layout.cards.some((c) => c.id === id && c.on);
   useEffect(() => {
     if (cardOn("consumption")) getConsumption().then(setConsumption).catch(() => undefined);
+    // revenus : carte masquée tant que l'API Getaround n'est pas configurée (404)
+    if (cardOn("revenue"))
+      getRevenue()
+        .then(setRevenue)
+        .catch((e) => setRevenue(e instanceof ApiError && e.status === 404 ? "off" : null));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [layout]);
   useEffect(() => {
@@ -1302,6 +1317,31 @@ function Dashboard({ onLoggedOut }: { onLoggedOut: () => void }) {
             const day = (iso: string) => new Intl.DateTimeFormat("fr-BE", { weekday: "short", day: "numeric", month: "short" }).format(new Date(iso));
             const slot = (iso: string) =>
               new Intl.DateTimeFormat("fr-BE", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }).format(new Date(iso));
+            if (c.id === "revenue") {
+              if (revenue === "off") return null;
+              return shell(
+                "wallet",
+                "REVENUS · CE MOIS-CI",
+                revenue ? eur(revenue.thisMonth.total, revenue.currency) : "…",
+                revenue ? `${monthName(revenue.prevMonth.month)} : ${eur(revenue.prevMonth.total, revenue.currency)}` : null,
+                revenue && revenue.invoices.length > 0 ? (
+                  <ul className="conso-trips">
+                    {revenue.invoices.slice(0, 3).map((i) => (
+                      <li key={i.id}>
+                        <div>
+                          <strong>{day(i.at)}</strong>
+                          <span className="muted small">Location n° {i.rentalId}</span>
+                        </div>
+                        <strong>{eur(i.amount, i.currency)}</strong>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="muted small">Aucune facture récente.</p>
+                ),
+                () => setRevenueOpen(true),
+              );
+            }
             if (c.id === "nextRental")
               return shell(
                 "calendar",
@@ -1452,6 +1492,10 @@ function Dashboard({ onLoggedOut }: { onLoggedOut: () => void }) {
           onChange={setLayout}
           onClose={() => setLayoutOpen(false)}
         />
+      )}
+
+      {revenueOpen && (
+        <RevenueScreen backIcon={<Icon name="arrowLeft" />} closeIcon={<Icon name="close" />} onClose={() => setRevenueOpen(false)} />
       )}
 
       {consumptionOpen && (

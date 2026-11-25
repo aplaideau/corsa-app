@@ -2,11 +2,13 @@ import { useEffect, useState, type ReactNode } from "react";
 import {
   ApiError,
   getChargings,
+  getRevenue,
   getUpcomingRentals,
   saveLayout,
   type CardId,
   type ChargingRecord,
   type Layout,
+  type Revenue,
   type UpcomingRental,
 } from "./services/vehicleApi";
 
@@ -113,6 +115,86 @@ export function ChargesScreen(props: Omit<ShellProps, "title" | "children">) {
 }
 
 // ---------------------------------------------------------------------------
+// Revenus (factures Getaround)
+// ---------------------------------------------------------------------------
+export const eur = (n: number, currency = "EUR") => n.toLocaleString("fr-BE", { style: "currency", currency });
+export const monthName = (m: string) =>
+  new Intl.DateTimeFormat("fr-BE", { month: "long", year: "numeric" }).format(new Date(`${m}-15T12:00:00`));
+
+export function RevenueScreen(props: Omit<ShellProps, "title" | "children">) {
+  const [data, setData] = useState<Revenue | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    getRevenue()
+      .then(setData)
+      .catch((e) =>
+        setError(e instanceof ApiError && e.status === 404 ? "API Getaround non configurée" : errText(e, "Revenus indisponibles")),
+      );
+  }, []);
+  return (
+    <DetailShell title="Revenus" {...props}>
+      {error ? (
+        <section className="configuration-card notif-card">
+          <h3>{error}</h3>
+        </section>
+      ) : !data ? (
+        <section className="configuration-card notif-card">
+          <p>Chargement…</p>
+        </section>
+      ) : (
+        <>
+          <section className="configuration-card notif-card conso-hero">
+            <span className="section-label">{monthName(data.thisMonth.month).toUpperCase()}</span>
+            <div className="conso-big">{eur(data.thisMonth.total, data.currency)}</div>
+            <p className="muted">
+              {data.thisMonth.count} location{data.thisMonth.count > 1 ? "s" : ""} facturée{data.thisMonth.count > 1 ? "s" : ""} ·{" "}
+              {monthName(data.prevMonth.month)} : {eur(data.prevMonth.total, data.currency)}
+            </p>
+          </section>
+          <section className="configuration-card notif-card">
+            <h3>Par mois</h3>
+            {data.months.length === 0 ? (
+              <p className="muted">Aucune facture sur les 3 derniers mois.</p>
+            ) : (
+              <ul className="conso-trips">
+                {data.months.map((m) => (
+                  <li key={m.month}>
+                    <div>
+                      <strong>{monthName(m.month)}</strong>
+                      <span className="muted small">
+                        {m.count} location{m.count > 1 ? "s" : ""}
+                      </span>
+                    </div>
+                    <strong>{eur(m.total, data.currency)}</strong>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+          {data.invoices.length > 0 && (
+            <section className="configuration-card notif-card">
+              <h3>Factures</h3>
+              <ul className="conso-trips">
+                {data.invoices.map((i) => (
+                  <li key={i.id}>
+                    <div>
+                      <strong>{fmtDay(i.at)}</strong>
+                      <span className="muted small">Location n° {i.rentalId}</span>
+                    </div>
+                    <strong>{eur(i.amount, i.currency)}</strong>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+          <p className="muted small">Montants reversés par Getaround (factures émises), 3 derniers mois.</p>
+        </>
+      )}
+    </DetailShell>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Locations prévues
 // ---------------------------------------------------------------------------
 export function RentalsScreen(props: Omit<ShellProps, "title" | "children"> & { getaroundUrl?: string; openExternal: (url: string) => void }) {
@@ -210,6 +292,7 @@ const CARD_LABELS: Record<CardId, { title: string; text: string }> = {
   nextRental: { title: "Prochaine location", text: "D’après les e-mails Getaround" },
   consumption: { title: "Consommation", text: "Moyenne 30 jours et autonomie réelle" },
   charges: { title: "Statistiques de recharge", text: "Dernière recharge et historique" },
+  revenue: { title: "Revenus", text: "Gains du mois d’après les factures Getaround" },
 };
 
 export function LayoutScreen(

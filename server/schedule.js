@@ -31,9 +31,11 @@ function createSchedule({ dataDir }) {
     const data = load();
     const at = iso(event.at) || new Date().toISOString();
     const current = data.rentals[event.rentalId];
-    if (current && current.updatedAt && new Date(current.updatedAt) > new Date(at)) return false;
+    // un début / une fin de location s'applique toujours (les dates, elles, peuvent venir de l'API, plus récente)
+    const transition = event.type === "start" || event.type === "end";
+    if (!transition && current && current.updatedAt && new Date(current.updatedAt) > new Date(at)) return false;
 
-    const r = { ...(current || {}), updatedAt: at };
+    const r = { ...(current || {}), updatedAt: transition && current && current.updatedAt > at ? current.updatedAt : at };
     const start = iso(event.plannedStart);
     const end = iso(event.plannedEnd);
     switch (event.type) {
@@ -67,6 +69,34 @@ function createSchedule({ dataDir }) {
     return true;
   }
 
+  /** Mise à jour depuis l'API Getaround (source de vérité pour les dates ; n'annule ni ne ressuscite). */
+  function upsertFromApi({ rentalId, start, end, carId = null, bookedAt = null }) {
+    if (!rentalId || !start || !end) return false;
+    const data = load();
+    const id = String(rentalId);
+    const r = { ...(data.rentals[id] || {}) };
+    if (r.start !== iso(start)) r.reminded = false;
+    r.start = iso(start);
+    r.end = iso(end);
+    if (carId != null) r.carId = String(carId);
+    if (!r.status) r.status = "booked";
+    if (!r.bookedAt) r.bookedAt = iso(bookedAt) || new Date().toISOString();
+    r.updatedAt = new Date().toISOString();
+    r.source = "api";
+    data.rentals[id] = r;
+    prune(data);
+    save(data);
+    return true;
+  }
+
+  /** Annulation reçue de l'API (webhook rental.canceled). */
+  function cancel(rentalId) {
+    const data = load();
+    const id = String(rentalId);
+    data.rentals[id] = { ...(data.rentals[id] || {}), status: "cancelled", updatedAt: new Date().toISOString() };
+    save(data);
+  }
+
   /** Locations confirmées pas encore commencées (ou dont le début n'a pas encore été confirmé). */
   function upcoming() {
     const now = Date.now();
@@ -86,7 +116,7 @@ function createSchedule({ dataDir }) {
     if (data.rentals[rentalId]) { data.rentals[rentalId].reminded = true; save(data); }
   }
 
-  return { apply, upcoming, next, markReminded };
+  return { apply, upsertFromApi, cancel, upcoming, next, markReminded };
 }
 
 module.exports = { createSchedule };

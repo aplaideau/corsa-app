@@ -10,6 +10,7 @@ const { startMailWatcher, BOOKING_TYPES, brusselsDate } = require("./getaround-m
 const { createSchedule } = require("./schedule");
 const { createRentalPrivacy } = require("./rental-privacy");
 const { startAbrpShare } = require("./abrp-share");
+const { createGetaroundApi } = require("./getaround-api");
 const { createNotifier, startVehicleMonitor } = require("./notifications");
 
 const {
@@ -390,8 +391,27 @@ function changelogSince(previous) {
   }
   return items;
 }
+// API Getaround : webhooks (temps réel) + vérification toutes les 10 min ; e-mails gardés en secours
+const getaroundApi = createGetaroundApi({
+  token: process.env.GETAROUND_TOKEN || "",
+  webhookSecret: process.env.GETAROUND_WEBHOOK_SECRET || "",
+  carIds: String(process.env.GETAROUND_CAR_IDS || "").split(",").map((x) => x.trim()).filter(Boolean),
+  dataDir: DATA_DIR,
+  schedule,
+  onRentalEvent: onGetaroundEvent,
+});
+if (getaroundApi) console.log("API Getaround activée");
+
+// revenus (factures Getaround)
+app.get("/api/revenue", async (req, res) => {
+  if (!getaroundApi) return res.status(404).json({ error: "API Getaround non configurée" });
+  try { res.json(await getaroundApi.revenue()); }
+  catch (e) { res.status(502).json({ error: "Revenus indisponibles" }); }
+});
+app.get("/api/getaround/status", (req, res) => res.json(getaroundApi ? getaroundApi.status() : { configured: false }));
+
 // accueil personnalisable : cartes affichées et leur ordre (les éléments fixes ne sont pas réglables)
-const LAYOUT_CARDS = ["location", "nextRental", "consumption", "charges"];
+const LAYOUT_CARDS = ["location", "nextRental", "consumption", "charges", "revenue"];
 const layoutFile = path.join(DATA_DIR, "layout.json");
 function readLayout() {
   let saved = {};
@@ -637,9 +657,18 @@ async function onGetaroundEvent(event) {
     if (!event.backfill) updateMailState({ lastEvent: summary });
     return;
   }
+  // même début / fin reçu par plusieurs voies (API, webhook, e-mail) : traité une seule fois
+  const handledKey = `${event.type}:${event.rentalId}`;
+  const handled = readState().handledEvents || [];
+  if (event.rentalId && handled.includes(handledKey)) return;
   if (Date.now() - at.getTime() > EVENT_MAX_AGE_MS) {
     updateMailState({ lastEvent: { ...summary, ignored: "trop ancien" } });
     return;
+  }
+  if (event.rentalId) {
+    const st = readState();
+    st.handledEvents = [...(st.handledEvents || []).slice(-200), handledKey];
+    writeState(st);
   }
   const current = readState().rental || {};
   if (event.type === "start") {
@@ -648,7 +677,7 @@ async function onGetaroundEvent(event) {
       return;
     }
     await setRentalMode(true, {
-      source: "email", rentalId: event.rentalId, startedAt: at.toISOString(),
+      source: event.source || "email", rentalId: event.rentalId, startedAt: at.toISOString(),
       plannedEnd: event.plannedEnd ? event.plannedEnd.toISOString() : null,
     });
     await notifier.notify("rental_start", `Location #${event.rentalId} débutée`,
@@ -656,7 +685,7 @@ async function onGetaroundEvent(event) {
       { tag: `rental-${event.rentalId}` });
   } else if (event.type === "end") {
     if (current.enabled && (!current.rentalId || current.rentalId === event.rentalId)) {
-      await setRentalMode(false, { source: "email", rentalId: event.rentalId });
+      await setRentalMode(false, { source: event.source || "email", rentalId: event.rentalId });
     }
     const details = [`Voiture fermée à ${BXL(at)}`];
     if (event.distanceKm != null) details.push(`${event.distanceKm} km parcourus`);
@@ -740,8 +769,15 @@ app.use("/", createProxyMiddleware({
 
 app.listen(Number(PORT), () => console.log(`corsa-app en écoute sur :${PORT} → psacc ${PSACC_URL}`));
 
-// page publique « batterie en direct dans ABRP » pour le locataire (QR code), sur un port à part
+
+// serveur public (port à part, publié seul par Tailscale Funnel) :
+// webhooks Getaround + page « batterie en direct dans ABRP » du locataire (QR code)
+const publicApp = express();
+publicApp.disable("x-powered-by");
+publicApp.set("trust proxy", "loopback");
+if (getaroundApi) publicApp.use(getaroundApi.router);
 abrpShare = startAbrpShare({
+  app: publicApp,
   port: process.env.PUBLIC_PORT || 8081,
   shareToken: process.env.PUBLIC_SHARE_TOKEN || "",
   publicBaseUrl: process.env.PUBLIC_BASE_URL || "",
@@ -751,3 +787,9 @@ abrpShare = startAbrpShare({
   getStatus: readVehicleStatus,
   getRental: () => readState().rental || null,
 });
+if (abrpShare || (getaroundApi && process.env.GETAROUND_WEBHOOK_SECRET)) {
+  publicApp.use((req, res) => res.status(404).end());
+  const PUBLIC_PORT = Number(process.env.PUBLIC_PORT || 8081);
+  publicApp.listen(PUBLIC_PORT, () => console.log(`serveur public (webhooks, page locataire) sur :${PUBLIC_PORT}`));
+}
+
