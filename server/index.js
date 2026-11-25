@@ -487,7 +487,8 @@ app.get("/api/consumption", async (req, res) => {
         minutes: Number(t.duration) || 0,
         speed: Number(t.speed_average) || 0,
       }))
-      .filter((t) => t.distance > 0 && !Number.isNaN(t.at.getTime()))
+      // trajets de moins de 2 km écartés partout : par temps froid, le chauffage de la batterie fausse la moyenne
+      .filter((t) => t.distance >= 2 && !Number.isNaN(t.at.getTime()))
       .sort((a, b) => a.at - b.at);
     const since = Date.now() - 30 * 86400000;
     const last30 = weighted(trips.filter((t) => t.at.getTime() >= since));
@@ -514,8 +515,7 @@ app.get("/api/consumption", async (req, res) => {
       soh,
       batteryKwh: BATTERY_KWH,
       monthly,
-      // trajets de moins de 2 km : pas de moyenne fiable, on ne les liste pas
-      recent: trips.filter((t) => t.distance >= 2).slice(-15).reverse().map((t) => ({
+      recent: trips.slice(-15).reverse().map((t) => ({
         at: t.at.toISOString(),
         km: Math.round(t.distance * 10) / 10,
         minutes: Math.round(t.minutes),
