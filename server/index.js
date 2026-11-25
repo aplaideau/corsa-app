@@ -514,11 +514,12 @@ app.get("/api/consumption", async (req, res) => {
       soh,
       batteryKwh: BATTERY_KWH,
       monthly,
-      recent: trips.slice(-15).reverse().map((t) => ({
+      // trajets de moins de 2 km : pas de moyenne fiable, on ne les liste pas
+      recent: trips.filter((t) => t.distance >= 2).slice(-15).reverse().map((t) => ({
         at: t.at.toISOString(),
         km: Math.round(t.distance * 10) / 10,
         minutes: Math.round(t.minutes),
-        avg: t.distance >= 2 ? Math.round((1000 * t.kwh) / t.distance) / 10 : null,
+        avg: Math.round((1000 * t.kwh) / t.distance) / 10,
       })),
       since: trips.length ? trips[0].at.toISOString() : null,
     });
