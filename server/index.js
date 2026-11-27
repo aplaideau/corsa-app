@@ -628,6 +628,7 @@ startVehicleMonitor({
     return m.lastError ? { since: m.lastErrorSince || m.lastCheck } : null;
   },
   getStatus: readVehicleStatus,
+  isRental: () => Boolean((readState().rental || {}).enabled),
 });
 
 // ---- e-mails Getaround → mode location automatique ----------------------------

@@ -119,7 +119,7 @@ function createNotifier({ dataDir, subject = "mailto:corsa-app@localhost", log =
  * Surveille l'état de la voiture (cache psacc) et détecte les événements de charge et de batterie.
  * `getStatus()` renvoie {level, autonomy, chargeStatus, plugged, moving, threshold} ou lance une erreur.
  */
-function startVehicleMonitor({ notifier, getStatus, getMailError, intervalMs = 120000, statePath, log = console }) {
+function startVehicleMonitor({ notifier, getStatus, getMailError, isRental = () => false, intervalMs = 120000, statePath, log = console }) {
   const loadState = () => { try { return JSON.parse(fs.readFileSync(statePath, "utf8")); } catch (e) { return {}; } };
   const saveState = (st) => fs.writeFileSync(statePath, JSON.stringify(st));
   let failingSince = null;
@@ -153,6 +153,9 @@ function startVehicleMonitor({ notifier, getStatus, getMailError, intervalMs = 1
       }
     } else st.techMailNotified = false;
 
+    // pendant une location : charge suivie comme d'habitude, mais sans notification
+    const chargeNotify = isRental() ? async () => 0 : notifier.notify;
+
     // --- début et fin de charge. Les données Stellantis peuvent osciller (état en retard puis rafraîchi) :
     // un arrêt n'est retenu que s'il se voit sur 2 relevés de suite, dont au moins un plus récent
     // que le dernier relevé « en charge ». Sinon : pas de notification (évite les fausses alertes).
@@ -166,7 +169,7 @@ function startVehicleMonitor({ notifier, getStatus, getMailError, intervalMs = 1
       if (v.fast) st.sessionFast = true;
       if (st.sessionFast && !st.fastNotified) {
         st.fastNotified = true;
-        await notifier.notify("charge_fast", "Charge rapide en cours",
+        await chargeNotify("charge_fast", "Charge rapide en cours",
           `Batterie à ${v.level} % : sur une borne rapide, la limite de ${threshold} % ne s'applique pas.`, { tag: "charge" });
       }
       st.chargeStatus = "InProgress";
@@ -178,13 +181,13 @@ function startVehicleMonitor({ notifier, getStatus, getMailError, intervalMs = 1
       if (st.pendingStop.count >= 2 && st.pendingStop.newer) {
         const reached = v.level >= Math.min(threshold, 100) - 2 || v.chargeStatus === "Finished";
         if (st.sessionFast) {
-          await notifier.notify("charge_done", "Charge rapide terminée",
+          await chargeNotify("charge_done", "Charge rapide terminée",
             `Batterie à ${v.level} %${v.autonomy ? ` · ${v.autonomy} km d'autonomie` : ""}.`, { tag: "charge" });
         } else if (reached) {
-          await notifier.notify("charge_done", "Charge terminée",
+          await chargeNotify("charge_done", "Charge terminée",
             `Batterie à ${v.level} %${v.autonomy ? ` · ${v.autonomy} km d'autonomie` : ""}.`, { tag: "charge" });
         } else {
-          await notifier.notify("charge_interrupted", "Charge interrompue",
+          await chargeNotify("charge_interrupted", "Charge interrompue",
             `La charge s'est arrêtée à ${v.level} %, avant ta limite de ${threshold} %${v.plugged ? "" : " (câble débranché)"}.`, { tag: "charge" });
         }
         st.chargeStatus = v.chargeStatus;
@@ -202,13 +205,13 @@ function startVehicleMonitor({ notifier, getStatus, getMailError, intervalMs = 1
       const hhmm = new Intl.DateTimeFormat("fr-BE", { timeZone: "Europe/Brussels", hour: "2-digit", minute: "2-digit" }).format(new Date(updatedMs));
       if (!st.asleepNotified && v.chargeStatus === "InProgress" && !st.sessionFast && ageMin > 30) {
         st.asleepNotified = true;
-        await notifier.notify("car_asleep", "La voiture dort pendant la charge",
+        await chargeNotify("car_asleep", "La voiture dort pendant la charge",
           `Dernières données à ${hhmm} (${v.level} %) : la limite de ${threshold} % ne peut pas agir. Déverrouille-la pour la réveiller.`,
           { tag: "asleep" });
       } else if (st.asleepNotified && ageMin < 15) {
         st.asleepNotified = false;
         const active = v.chargeStatus === "InProgress" ? ", limite de charge active" : "";
-        await notifier.notify("car_asleep", "Voiture de nouveau connectée",
+        await chargeNotify("car_asleep", "Voiture de nouveau connectée",
           `Batterie à ${v.level} %${active}.`, { tag: "asleep" });
       }
     }
